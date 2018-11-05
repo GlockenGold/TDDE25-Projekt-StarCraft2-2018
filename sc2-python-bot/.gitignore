@@ -1,0 +1,10 @@
+# Compiled Python code
+__pycache__/
+# You should download the library file, not store it in version control
+*.pyd
+*.pyc
+
+# files in .idea/
+workspace.xml
+usage.statistics.xml
+tasks.xml
