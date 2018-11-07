@@ -59,14 +59,6 @@ class MyAgent(IDABot):
             if too_few and self.can_afford(scv_type) and not center.is_training:
                 center.train(scv_type)
 
-    def build_depots(self):
-        my_workers = self.get_my_workers()
-        supply_depot_type = UnitType(UNIT_TYPEID.TERRAN_SUPPLYDEPOT, self)
-        base_location = self.get_starting_base().depot_position
-        build_location = self.building_placer.get_build_location_near(base_location, supply_depot_type)
-        if self.current_supply >= self.max_supply - 1 and self.can_afford(supply_depot_type):
-            choose_worker = random.choice(my_workers)
-            choose_worker.build(supply_depot_type, build_location)
 
     def can_afford(self, unit_type: UnitType):
         """ Returns True if there are an sufficient amount of minerals,
@@ -121,9 +113,23 @@ class MyAgent(IDABot):
 
         return None
 
+    def buld_depots(self):
+        """Constructs an additional supply depot if current supply is reaching supply maximum """
+        workers = self.get_my_workers()
+        constructing_workers = []
+        supply_depot = UnitType(UNIT_TYPEID.TERRAN_SUPPLYDEPOT, self)
+        base_location = self.get_starting_base().depot_position
+        build_location = self.building_placer.get_build_location_near(base_location, supply_depot)
+        for worker in workers:
+            if worker.is_constructing(supply_depot):
+                constructing_workers.append(worker)
+        if self.current_supply >= self.max_supply - 1 and self.can_afford(supply_depot):
+            if len(constructing_workers) == 0:
+                worker = random.choice(workers)
+                worker.build(supply_depot, build_location)
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
