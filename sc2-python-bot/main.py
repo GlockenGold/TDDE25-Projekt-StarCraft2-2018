@@ -112,7 +112,7 @@ class MyAgent(IDABot):
     def build_refineries(self):
         my_workers = self.get_my_workers()
         base_location = self.get_starting_base()
-        geyser_location = [base_location.geysers for geyser in base_location.geysers if self.get_refinery(geyser) is None]
+        geyser_location = base_location.geysers # [base_location.geysers for geyser in base_location.geysers if self.get_refinery(geyser) is None]
         refinery_type = UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)
         constructing_workers = []
         build_location = random.choice(geyser_location)
@@ -158,13 +158,8 @@ class MyAgent(IDABot):
     def is_worker_collecting_gas(self, worker):
         """ Returns: True if a Unit `worker` is collecting gas, False otherwise """
 
-        def squared_distance(unit_1, unit_2):
-            p1 = unit_1.position
-            p2 = unit_2.position
-            return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-
         for refinery in self.get_my_refineries():
-            if refinery.is_completed and squared_distance(worker, refinery) < 2 ** 2:
+            if refinery.is_completed and self.squared_distance(worker, refinery) < 2 ** 2:
                 return True
 
     def get_refinery(self, geyser: Unit) -> Optional[Unit]:
