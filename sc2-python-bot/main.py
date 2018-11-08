@@ -84,15 +84,6 @@ class MyAgent(IDABot):
                 worker.right_click(choose_mineral)
         """
 
-    def produce_workers(self):
-        base_location = self.get_starting_base()
-        scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
-        my_workers = self.get_my_workers()
-        my_command_centers = self.get_my_producers(scv_type)
-        too_few = len(my_workers) < 2 * len(base_location.minerals) + 2 * len(self.get_my_refineries()) # TODO: Ta bort hårdkodning, kolla hur många workers basen har, etc.
-        for center in my_command_centers:
-            if too_few and self.can_afford(scv_type) and not center.is_training:
-                center.train(scv_type)
 
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
@@ -109,6 +100,7 @@ class MyAgent(IDABot):
                 worker = random.choice(workers)
                 worker.build(supply_depot, build_location)
 
+
     def build_refineries(self):
         my_workers = self.get_my_workers()
         base_location = self.get_starting_base()
@@ -123,12 +115,40 @@ class MyAgent(IDABot):
             worker = random.choice(my_workers)
             worker.build_target(refinery_type, build_location)
 
+
+    def produce_workers(self):
+        base_location = self.get_starting_base()
+        scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
+        my_workers = self.get_my_workers()
+        my_command_centers = self.get_my_producers(scv_type)
+        too_few = len(my_workers) < 2 * len(base_location.minerals) + 2 * len(self.get_my_refineries())
+        if too_few:
+            self.produce_unit(scv_type)
+
+
+    def produce_unit(self,unit_type: UnitType):
+        if not self.supply_is_sufficient(unit_type):
+            self.need_more_supply = True
+            return False
+        producers = self.get_my_producers(unit_type)
+        for producer in producers:
+            if self.can_afford(unit_type) and not producer.is_training:
+                producer.train(unit_type)
+                return True
+        return False
+
+
     def can_afford(self, unit_type: UnitType):
         """ Returns True if there are an sufficient amount of minerals,
         gas and supply to build the given unit_type, False otherwise """
         return self.minerals >= unit_type.mineral_price\
             and self.gas >= unit_type.gas_price\
-            and (self.max_supply - self.current_supply) >= unit_type.supply_required
+            and self.supply_is_sufficient(unit_type)
+
+
+    def supply_is_sufficient(self,unit_type: UnitType):
+        return (self.max_supply - self.current_supply) >= unit_type.supply_required
+
 
     def get_my_producers(self, unit_type: UnitType):
         """ Returns a list of units which can build or train units of type unit_type """
@@ -142,6 +162,7 @@ class MyAgent(IDABot):
 
         return producers
 
+
     def get_my_refineries(self):
         """ Returns a list of all refineries (list of Unit) """
         refineries = []
@@ -150,10 +171,12 @@ class MyAgent(IDABot):
                 refineries.append(unit)
         return refineries
 
+
     def squared_distance(self, unit_1, unit_2):
         p1 = unit_1.position
         p2 = unit_2.position
         return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
+
 
     def is_worker_collecting_gas(self, worker):
         """ Returns: True if a Unit `worker` is collecting gas, False otherwise """
@@ -161,6 +184,7 @@ class MyAgent(IDABot):
         for refinery in self.get_my_refineries():
             if refinery.is_completed and self.squared_distance(worker, refinery) < 2 ** 2:
                 return True
+
 
     def get_refinery(self, geyser: Unit) -> Optional[Unit]:
         """
@@ -178,7 +202,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
