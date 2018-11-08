@@ -5,10 +5,16 @@ from typing import Optional
 from library import *
 
 
+
+
+
 class MyAgent(IDABot):
+
     def __init__(self):
         IDABot.__init__(self)
         self.need_more_supply = False
+        self.requested_unit_counts = {}
+        self.game_ticker = 0
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -17,9 +23,16 @@ class MyAgent(IDABot):
         IDABot.on_step(self)
         self.print_debug()
         self.start_gathering()
-        self.produce_workers()
-        self.build_depots()
-        self.build_refineries()
+        self.request_workers()
+        if(self.game_ticker == 0):
+            self.untarget_command_centers()
+        if(self.game_ticker % 2 == 0):
+            self.train_requests()
+        if self.game_ticker % 5 == 0:
+            self.build_refineries()
+            self.build_depots()
+        self.game_ticker+=1
+
 
     def print_debug(self):
         my_units = self.get_my_units()
@@ -31,6 +44,21 @@ class MyAgent(IDABot):
             unit_id = unit.id
             debug_string = "<UnitType: '{}'> id: {} i: {}".format(unit_type, str(unit_id), str(index))
             self.map_tools.draw_text(unit.position, debug_string, Color.WHITE)
+
+    def untarget_command_centers(self):
+        command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
+        for command_center in command_centers:
+            command_center.right_click(command_center)
+
+
+    def train_requests(self):
+        print(self.requested_unit_counts)
+        for unit_type in self.requested_unit_counts:
+            if(self.requested_unit_counts[unit_type]>0):
+                amount_trained = self.train_unit(unit_type, self.requested_unit_counts[unit_type])
+                self.requested_unit_counts[unit_type]= self.requested_unit_counts[unit_type] - amount_trained
+
+
 
     def get_starting_base(self):
         return self.base_location_manager.get_player_starting_base_location(PLAYER_SELF)
@@ -74,16 +102,7 @@ class MyAgent(IDABot):
                 elif worker_index > 2 * len(base_minerals):
                     for refinery in base_refineries:
                         worker.right_click(refinery)
-        """base_location = self.get_starting_base()
-        my_workers = self.get_my_workers()
-        base_minerals = base_location.minerals
-        choose_mineral = random.choice(base_minerals)
-        refineries = [refinery.is_completed for refinery in self.get_my_refineries()]
-        gas_collectors = [self.is_worker_collecting_gas(worker) for worker in my_workers]
-        for worker in my_workers:
-            if worker.is_idle:
-                worker.right_click(choose_mineral)
-        """
+
 
 
     def build_depots(self):
@@ -96,10 +115,12 @@ class MyAgent(IDABot):
         for worker in workers:
             if worker.is_constructing(supply_depot):
                 constructing_workers.append(worker)
-        if self.current_supply >= self.max_supply - 1 and self.can_afford(supply_depot):
+        if (self.current_supply >= self.max_supply - 2 or self.need_more_supply) and self.can_afford(supply_depot):
+            self.need_more_supply = False
             if len(constructing_workers) == 0:
                 worker = random.choice(workers)
                 worker.build(supply_depot, build_location)
+
 
 
     def build_refineries(self):
@@ -117,26 +138,39 @@ class MyAgent(IDABot):
             worker.build_target(refinery_type, build_location)
 
 
-    def produce_workers(self):
-        base_location = self.get_starting_base()
+    def request_workers(self):
+        starting_base_location = self.get_starting_base()
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
+        #TODO: För flera baser.
         my_workers = self.get_my_workers()
-        my_command_centers = self.get_my_producers(scv_type)
-        too_few = len(my_workers) < 2 * len(base_location.minerals) + 2 * len(self.get_my_refineries())
-        if too_few:
-            self.produce_unit(scv_type)
+        amount_wanted =  2 * len(starting_base_location.minerals) + 2 * len(self.get_my_refineries()) - len(my_workers)
+        self.requested_unit_counts[scv_type] = amount_wanted
 
 
-    def produce_unit(self,unit_type: UnitType):
-        if not self.supply_is_sufficient(unit_type):
-            self.need_more_supply = True
-            return False
+    def request_unit(self,requested_type):
+        self.requested_unit_counts[requested_type] = self.requested_unit_counts.get(requested_type, 0) + 1
+
+    def get_requested_amount(self,unit_type):
+        return self.requested_unit_counts.get(unit_type, 0)
+
+    def train_unit(self, unit_type: UnitType, amount_requested):
+        """
+       :param unit_type: type of unit to be trained
+       :param amount_requested: amount of units requested to train
+       :return: amount of units queued up
+        """
         producers = self.get_my_producers(unit_type)
+        amount_trained = 0
         for producer in producers:
-            if self.can_afford(unit_type) and not producer.is_training:
-                producer.train(unit_type)
-                return True
-        return False
+            print(producer.is_training)
+            if not producer.is_training:
+                if not self.supply_is_sufficient(unit_type):
+                    self.need_more_supply = True
+                elif self.can_afford(unit_type) and amount_requested-amount_trained>0:
+                    producer.train(unit_type)
+                    amount_trained+=1
+
+        return amount_trained
 
 
     def can_afford(self, unit_type: UnitType):
