@@ -8,6 +8,7 @@ from library import *
 class MyAgent(IDABot):
     def __init__(self):
         IDABot.__init__(self)
+        self.need_more_supply = False
 
     def on_game_start(self):
         IDABot.on_game_start(self)
