@@ -5,16 +5,13 @@ from typing import Optional
 from library import *
 
 
-
-
-
 class MyAgent(IDABot):
-
     def __init__(self):
         IDABot.__init__(self)
         self.need_more_supply = False
         self.requested_unit_counts = {}
         self.game_ticker = 0
+        self.worker_dict ={}
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -22,6 +19,7 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         self.print_debug()
+        self.get_worker_dict()
         self.start_gathering()
         self.request_workers()
         if(self.game_ticker == 0):
@@ -71,37 +69,50 @@ class MyAgent(IDABot):
 
         return workers
 
-    def workers_working_in_base(self, base_location):
-        count_workers = 0
-        my_workers = self.get_my_workers()
-        for worker in my_workers:
-            if self.squared_distance(worker, base_location) < 6**2:
-                count_workers += 1
-        return count_workers
+    def get_worker_dict(self):
+        my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
+        base_locations = sorted(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
+        minerals = []
+        for base_number in range(len(base_locations)):
+            minerals.append(base_locations[base_number].minerals)
+            mineral_workers =[scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.GATHERING_MINERALS and
+             self.worker_dict[scv][1] == base_number]
+            mineral_condition = len(mineral_workers) < len(minerals[base_number]) * 2
+            gas_workers_1 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_1 and
+             self.worker_dict[scv][1] == base_number]
+            gas_condition_1 = len(gas_workers_1) < 3
+            gas_workers_2 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_2 and
+                             self.worker_dict[scv][1] == base_number]
+            gas_condition_2 = len(gas_workers_2) < 3
+            for worker in my_workers:
+                if worker not in self.worker_dict:
+                    if mineral_condition:
+                        self.worker_dict[worker] = (self.GATHERING_MINERALS, base_number)
+                    elif gas_condition_1:
+                        self.worker_dict[worker] = (self.COLLECTING_REFINERY_1, base_number)
+                    elif gas_condition_2:
+                        self.worker_dict[worker] = (self.COLLECTING_REFINERY_2, base_number)
 
-    def get_workers_in_refinery(self, refinery):
-        my_workers = self.get_my_workers()
-        workers_in_refinery = []
-        for worker in my_workers:
-            if refinery.is_completed and self.squared_distance(worker, refinery) < 2**2:
-                workers_in_refinery.append(worker)
-        return workers_in_refinery
+    GATHERING_MINERALS = 0
+    COLLECTING_REFINERY_1 = 1
+    COLLECTING_REFINERY_2 = 2
+
 
     def start_gathering(self):
-        base_locations = self.base_location_manager.get_occupied_base_locations(PLAYER_SELF)
-        # sorted_bases = sorted(base_locations, key=lambda base_id: base_id.id)
-        my_workers = self.get_my_workers()
-        sorted_workers = sorted(my_workers, key=lambda worker_id: worker_id.id)
-        for base_index, base in enumerate(base_locations):
-            base_minerals = base.minerals
-            base_refineries = [self.get_refinery(geyser) for geyser in base.geysers if self.get_refinery(geyser) is not None]
-            for worker_index, worker in enumerate(sorted_workers):
-                if worker.is_idle and worker_index <= 2 * len(base_minerals):
-                    chosen_mineral = random.choice(base_minerals)
-                    worker.right_click(chosen_mineral)
-                elif worker_index > 2 * len(base_minerals):
-                    for refinery in base_refineries:
-                        worker.right_click(refinery)
+        base_locations = sorted(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
+        refineries = sorted(self.get_my_refineries(), key=lambda refinery_id: refinery_id.id)
+        my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
+        worker_dict = self.worker_dict
+        for worker in worker_dict:
+            if worker.is_idle:
+                job = worker_dict[worker][0]
+                base_number = worker_dict[worker][1]
+                if job == self.GATHERING_MINERALS:
+                    worker.right_click(random.choice(base_locations[base_number].minerals))
+                elif job == self.COLLECTING_REFINERY_1:
+                    worker.right_click(refineries[base_number*2])
+                elif job == self.COLLECTING_REFINERY_2:
+                    worker.right_click(refineries[base_number*2 +1])
 
 
 
@@ -120,8 +131,6 @@ class MyAgent(IDABot):
             if len(constructing_workers) == 0:
                 worker = random.choice(workers)
                 worker.build(supply_depot, build_location)
-
-
 
     def build_refineries(self):
         my_workers = self.get_my_workers()
@@ -197,7 +206,6 @@ class MyAgent(IDABot):
 
         return producers
 
-
     def get_my_refineries(self):
         """ Returns a list of all refineries (list of Unit) """
         refineries = []
@@ -206,12 +214,10 @@ class MyAgent(IDABot):
                 refineries.append(unit)
         return refineries
 
-
     def squared_distance(self, unit_1, unit_2):
         p1 = unit_1.position
         p2 = unit_2.position
         return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-
 
     def is_worker_collecting_gas(self, worker):
         """ Returns: True if a Unit `worker` is collecting gas, False otherwise """
@@ -219,7 +225,6 @@ class MyAgent(IDABot):
         for refinery in self.get_my_refineries():
             if refinery.is_completed and self.squared_distance(worker, refinery) < 2 ** 2:
                 return True
-
 
     def get_refinery(self, geyser: Unit) -> Optional[Unit]:
         """
@@ -237,7 +242,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
