@@ -13,8 +13,7 @@ class MyAgent(IDABot):
         self.game_ticker = 0
         self.worker_dict ={}
         self.count_bases = 0
-        self.count_miners = 0
-        self.count_gas_collectors = 0
+        self.count_workers = 0
         self.count_barracks = 0
         self.count_combat_units = 0
         self.count_refineries = 0
@@ -26,9 +25,8 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         self.get_worker_dict()
-        self.print_unit_overview()
         self.print_debug()
-        self.start_gathering()
+        self.print_unit_overview()
         self.request_workers()
         if self.game_ticker == 0:
             self.deselect_command_centers()
@@ -38,7 +36,9 @@ class MyAgent(IDABot):
             self.build_refineries()
             self.build_depots()
             self.build_barracks()
-        self.game_ticker += 1
+            self.expand()
+        self.start_gathering()
+        self.game_ticker+=1
 
     # Ramp south: (115, 46) - (116, 44) - (118, 43)
     # Ramp north: (32, 124) - (35, 123) - (36, 121)
@@ -49,12 +49,10 @@ class MyAgent(IDABot):
         my_minerals = base_location.minerals
         my_geysers = base_location.geysers
         for index, unit in enumerate(my_units+my_geysers+my_minerals):
-            unit_type = unit.unit_type.name
-            unit_id = unit.id
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
                 if job == self.GATHERING_MINERALS:
-                    debug_string = "<{}, {}>".format("Miner", unit.position)
+                    debug_string = "<{}>".format("Miner")
                     self.map_tools.draw_text(unit.position, debug_string, Color.BLUE)
                 elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
                     debug_string = "<{}>".format("Gas Collector")
@@ -62,8 +60,7 @@ class MyAgent(IDABot):
 
     def print_unit_overview(self):
         self.count_bases = 0
-        self.count_miners = 0
-        self.count_gas_collectors = 0
+        self.count_workers = len(self.worker_dict)
         self.count_barracks = 0
         self.count_combat_units = 0
         self.count_refineries = 0
@@ -71,13 +68,7 @@ class MyAgent(IDABot):
         my_units = self.get_my_units()
         self.count_bases = len(self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self)))
         for unit in my_units:
-            if unit.unit_type.is_worker:
-                job = self.worker_dict[unit][0]
-                if job == self.GATHERING_MINERALS:
-                    self.count_miners +=1
-                elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
-                    self.count_gas_collectors +=1
-            elif unit.unit_type.is_refinery:
+            if unit.unit_type.is_refinery:
                 self.count_refineries +=1
             elif unit.unit_type.is_combat_unit:
                 self.count_combat_units +=1
@@ -85,9 +76,8 @@ class MyAgent(IDABot):
                 self.count_depots +=1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self):
                 self.count_barracks +=1
-        overview_string = " Bases: {} \n Miners: {} \n Gas Collectors: {} \n Refineries: {} \n Combat Units {} \n " \
-                          "Supply Depots: {} \n Barracks: {}".format(self.count_bases, self.count_miners,
-                                                                     self.count_gas_collectors, self.count_refineries,
+        overview_string = " Bases: {} \n Workers: {} \n Refineries: {} \n Combat Units {} \n " \
+                          "Supply Depots: {} \n Barracks: {}".format(self.count_bases, self.count_workers, self.count_refineries,
                                                                      self.count_combat_units, self.count_depots,
                                                                      self.count_barracks, )
         self.map_tools.draw_text_screen(0.005,0.005,overview_string, Color.RED)
@@ -98,7 +88,6 @@ class MyAgent(IDABot):
             command_center.right_click(command_center)
 
     def train_requests(self):
-        # print(self.requested_unit_counts)
         for unit_type in self.requested_unit_counts:
             if self.requested_unit_counts[unit_type]>0:
                 amount_trained = self.train_unit(unit_type, self.requested_unit_counts[unit_type])
@@ -203,6 +192,7 @@ class MyAgent(IDABot):
                 worker = random.choice(my_workers)
                 worker.build_target(refinery_type, build_location)
                 self.worker_dict[worker][0] = index + 1
+                break
 
     def request_workers(self):
         starting_base_location = self.get_starting_base()
@@ -229,7 +219,6 @@ class MyAgent(IDABot):
         producers = self.get_my_producers(unit_type)
         amount_trained = 0
         for producer in producers:
-            # print(producer.is_training)
             if not producer.is_training:
                 if not self.supply_is_sufficient(unit_type):
                     self.need_more_supply = True
@@ -295,15 +284,19 @@ class MyAgent(IDABot):
 
         return None
 
-    """def expand(self):
+    def expand(self):
+        command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
         number_of_bases = len(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
-        build_location = self.base_location_manager.get_next_expansion
-        expansion_condition = (if len(self.worker_dict) >= 22 * number_of_bases and
-        if len(self.worker_dict) >= 22 * number_of_bases:"""
+        build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
+        expansion_condition = (self.count_workers >=21*number_of_bases and self.count_barracks >= 1
+                               and self.can_afford(command_centre_type))
+        if expansion_condition:
+            worker = random.choice(self.get_my_workers())
+            worker.build(command_centre_type, build_location.depot_position)
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
