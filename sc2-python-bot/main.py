@@ -12,6 +12,13 @@ class MyAgent(IDABot):
         self.requested_unit_counts = {}
         self.game_ticker = 0
         self.worker_dict ={}
+        self.count_bases = 0
+        self.count_miners = 0
+        self.count_gas_collectors = 0
+        self.count_barracks = 0
+        self.count_combat_units = 0
+        self.count_refineries = 0
+        self.count_depots = 0
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -19,6 +26,7 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         self.get_worker_dict()
+        self.print_unit_overview()
         self.print_debug()
         self.start_gathering()
         self.request_workers()
@@ -48,6 +56,38 @@ class MyAgent(IDABot):
                 elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
                     debug_string = "<{}>".format("Gas Collector")
                     self.map_tools.draw_text(unit.position, debug_string, Color.GREEN)
+
+    def print_unit_overview(self):
+        self.count_bases = 0
+        self.count_miners = 0
+        self.count_gas_collectors = 0
+        self.count_barracks = 0
+        self.count_combat_units = 0
+        self.count_refineries = 0
+        self.count_depots = 0
+        my_units = self.get_my_units()
+        self.count_bases = len(self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self)))
+        for unit in my_units:
+            if unit.unit_type.is_worker:
+                job = self.worker_dict[unit][0]
+                if job == self.GATHERING_MINERALS:
+                    self.count_miners +=1
+                elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
+                    self.count_gas_collectors +=1
+            elif unit.unit_type.is_refinery:
+                self.count_refineries +=1
+            elif unit.unit_type.is_combat_unit:
+                self.count_combat_units +=1
+            elif unit.unit_type.is_supply_provider:
+                self.count_depots +=1
+            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self):
+                self.count_barracks +=1
+        overview_string = " Bases: {} \n Miners: {} \n Gas Collectors: {} \n Refineries: {} \n Combat Units {} \n " \
+                          "Supply Depots: {} \n Barracks: {}".format(self.count_bases, self.count_miners,
+                                                                     self.count_gas_collectors, self.count_refineries,
+                                                                     self.count_combat_units, self.count_depots,
+                                                                     self.count_barracks, )
+        self.map_tools.draw_text_screen(0.005,0.005,overview_string, Color.RED)
 
     def untarget_command_centers(self):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
@@ -245,6 +285,14 @@ class MyAgent(IDABot):
                 return unit
 
         return None
+
+    """def expand(self):
+        number_of_bases = len(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
+        build_location = self.base_location_manager.get_next_expansion
+        expansion_condition = (if len(self.worker_dict) >= 22 * number_of_bases and
+        if len(self.worker_dict) >= 22 * number_of_bases:"""
+
+
 
 
 def main():
