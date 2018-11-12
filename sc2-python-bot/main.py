@@ -30,15 +30,18 @@ class MyAgent(IDABot):
         self.print_debug()
         self.start_gathering()
         self.request_workers()
-        if(self.game_ticker == 0):
-            self.untarget_command_centers()
-        if(self.game_ticker % 2 == 0):
+        if self.game_ticker == 0:
+            self.deselect_command_centers()
+        if self.game_ticker % 2 == 0:
             self.train_requests()
         if self.game_ticker % 5 == 0:
             self.build_refineries()
             self.build_depots()
-        self.game_ticker+=1
+            self.build_barracks()
+        self.game_ticker += 1
 
+    # Ramp south: (115, 46) - (116, 44) - (118, 43)
+    # Ramp north: (32, 124) - (35, 123) - (36, 121)
 
     def print_debug(self):
         my_units = self.get_my_units()
@@ -51,7 +54,7 @@ class MyAgent(IDABot):
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
                 if job == self.GATHERING_MINERALS:
-                    debug_string = "<{}>".format("Miner")
+                    debug_string = "<{}, {}>".format("Miner", unit.position)
                     self.map_tools.draw_text(unit.position, debug_string, Color.BLUE)
                 elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
                     debug_string = "<{}>".format("Gas Collector")
@@ -89,20 +92,17 @@ class MyAgent(IDABot):
                                                                      self.count_barracks, )
         self.map_tools.draw_text_screen(0.005,0.005,overview_string, Color.RED)
 
-    def untarget_command_centers(self):
+    def deselect_command_centers(self):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
         for command_center in command_centers:
             command_center.right_click(command_center)
 
-
     def train_requests(self):
-        print(self.requested_unit_counts)
+        # print(self.requested_unit_counts)
         for unit_type in self.requested_unit_counts:
-            if(self.requested_unit_counts[unit_type]>0):
+            if self.requested_unit_counts[unit_type]>0:
                 amount_trained = self.train_unit(unit_type, self.requested_unit_counts[unit_type])
                 self.requested_unit_counts[unit_type]= self.requested_unit_counts[unit_type] - amount_trained
-
-
 
     def get_starting_base(self):
         return self.base_location_manager.get_player_starting_base_location(PLAYER_SELF)
@@ -122,13 +122,13 @@ class MyAgent(IDABot):
         for base_number in range(len(base_locations)):
             minerals.append(base_locations[base_number].minerals)
             mineral_workers =[scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.GATHERING_MINERALS and
-             self.worker_dict[scv][1] == base_number]
+                              self.worker_dict[scv][1] == base_number]
             mineral_condition = len(mineral_workers) < len(minerals[base_number]) * 2
-            gas_workers_1 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_1 and
-             self.worker_dict[scv][1] == base_number]
+            gas_workers_1 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_1
+                             and self.worker_dict[scv][1] == base_number]
             gas_condition_1 = len(gas_workers_1) < 3
-            gas_workers_2 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_2 and
-                             self.worker_dict[scv][1] == base_number]
+            gas_workers_2 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_2
+                             and self.worker_dict[scv][1] == base_number]
             gas_condition_2 = len(gas_workers_2) < 3
             for worker in my_workers:
                 if worker not in self.worker_dict:
@@ -143,7 +143,6 @@ class MyAgent(IDABot):
     COLLECTING_REFINERY_1 = 1
     COLLECTING_REFINERY_2 = 2
 
-
     def start_gathering(self):
         base_locations = sorted(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
         refineries = sorted(self.get_my_refineries(), key=lambda refinery_id: refinery_id.id)
@@ -157,9 +156,21 @@ class MyAgent(IDABot):
                 elif job == self.COLLECTING_REFINERY_1:
                     worker.right_click(refineries[base_number*2])
                 elif job == self.COLLECTING_REFINERY_2:
-                    worker.right_click(refineries[base_number*2 +1])
+                    worker.right_click(refineries[base_number*2 + 1])
 
-
+    def build_barracks(self):
+        workers = self.get_my_workers()
+        constructing_workers = []
+        barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
+        base_location = self.get_starting_base().depot_position
+        build_location = self.building_placer.get_build_location_near(base_location, barracks_type)
+        for worker in workers:
+            if worker.is_constructing(barracks_type):
+                constructing_workers.append(worker)
+        if len(constructing_workers) == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
+                and self.count_barracks == 0:
+            worker = random.choice(workers)
+            worker.build(barracks_type, build_location)
 
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
@@ -180,27 +191,28 @@ class MyAgent(IDABot):
     def build_refineries(self):
         my_workers = self.get_my_workers()
         base_location = self.get_starting_base()
-        geyser_location = sorted(base_location.geysers, key = lambda geyser_id: geyser_id.id) # [base_location.geysers for geyser in base_location.geysers if self.get_refinery(geyser) is None]
+        geyser_location = sorted(base_location.geysers, key=lambda geyser_id: geyser_id.id)
         refinery_type = UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)
         constructing_workers = []
         for index, build_location in enumerate(geyser_location):
             for worker in my_workers:
                 if worker.is_constructing(refinery_type):
                     constructing_workers.append(worker)
-            if len(constructing_workers) == 0 and self.can_afford(refinery_type) and self.get_refinery(build_location) == None and self.max_supply >= 23:
+            if len(constructing_workers) == 0 and self.can_afford(refinery_type) \
+                    and self.get_refinery(build_location) is None and self.max_supply >= 23:
                 worker = random.choice(my_workers)
                 worker.build_target(refinery_type, build_location)
-                self.worker_dict[worker][0] = index +1
-
+                self.worker_dict[worker][0] = index + 1
 
     def request_workers(self):
         starting_base_location = self.get_starting_base()
+        base_locations = self.base_location_manager.get_occupied_base_locations(PLAYER_SELF)
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
-        #TODO: För flera baser.
+        # TODO: För flera baser.
         my_workers = self.get_my_workers()
-        amount_wanted =  2 * len(starting_base_location.minerals) + 2 * len(self.get_my_refineries()) - len(my_workers)
-        self.requested_unit_counts[scv_type] = amount_wanted
-
+        for base in base_locations:
+            amount_wanted = 2 * len(base.minerals) + 2 * len(self.get_my_refineries()) - len(my_workers)
+            self.requested_unit_counts[scv_type] = amount_wanted
 
     def request_unit(self,requested_type):
         self.requested_unit_counts[requested_type] = self.requested_unit_counts.get(requested_type, 0) + 1
@@ -217,7 +229,7 @@ class MyAgent(IDABot):
         producers = self.get_my_producers(unit_type)
         amount_trained = 0
         for producer in producers:
-            print(producer.is_training)
+            # print(producer.is_training)
             if not producer.is_training:
                 if not self.supply_is_sufficient(unit_type):
                     self.need_more_supply = True
@@ -227,7 +239,6 @@ class MyAgent(IDABot):
 
         return amount_trained
 
-
     def can_afford(self, unit_type: UnitType):
         """ Returns True if there are an sufficient amount of minerals,
         gas and supply to build the given unit_type, False otherwise """
@@ -235,10 +246,8 @@ class MyAgent(IDABot):
             and self.gas >= unit_type.gas_price\
             and self.supply_is_sufficient(unit_type)
 
-
     def supply_is_sufficient(self,unit_type: UnitType):
         return (self.max_supply - self.current_supply) >= unit_type.supply_required
-
 
     def get_my_producers(self, unit_type: UnitType):
         """ Returns a list of units which can build or train units of type unit_type """
@@ -293,10 +302,8 @@ class MyAgent(IDABot):
         if len(self.worker_dict) >= 22 * number_of_bases:"""
 
 
-
-
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
