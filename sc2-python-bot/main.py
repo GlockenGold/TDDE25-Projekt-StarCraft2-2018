@@ -18,8 +18,8 @@ class MyAgent(IDABot):
 
     def on_step(self):
         IDABot.on_step(self)
-        self.print_debug()
         self.get_worker_dict()
+        self.print_debug()
         self.start_gathering()
         self.request_workers()
         if(self.game_ticker == 0):
@@ -40,8 +40,14 @@ class MyAgent(IDABot):
         for index, unit in enumerate(my_units+my_geysers+my_minerals):
             unit_type = unit.unit_type.name
             unit_id = unit.id
-            debug_string = "<UnitType: '{}'> id: {} i: {}".format(unit_type, str(unit_id), str(index))
-            self.map_tools.draw_text(unit.position, debug_string, Color.WHITE)
+            if unit.unit_type.is_worker:
+                job = self.worker_dict[unit][0]
+                if job == self.GATHERING_MINERALS:
+                    debug_string = "<{}>".format("Miner")
+                    self.map_tools.draw_text(unit.position, debug_string, Color.BLUE)
+                elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
+                    debug_string = "<{}>".format("Gas Collector")
+                    self.map_tools.draw_text(unit.position, debug_string, Color.GREEN)
 
     def untarget_command_centers(self):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
@@ -87,11 +93,11 @@ class MyAgent(IDABot):
             for worker in my_workers:
                 if worker not in self.worker_dict:
                     if mineral_condition:
-                        self.worker_dict[worker] = (self.GATHERING_MINERALS, base_number)
+                        self.worker_dict[worker] = [self.GATHERING_MINERALS, base_number]
                     elif gas_condition_1:
-                        self.worker_dict[worker] = (self.COLLECTING_REFINERY_1, base_number)
+                        self.worker_dict[worker] = [self.COLLECTING_REFINERY_1, base_number]
                     elif gas_condition_2:
-                        self.worker_dict[worker] = (self.COLLECTING_REFINERY_2, base_number)
+                        self.worker_dict[worker] = [self.COLLECTING_REFINERY_2, base_number]
 
     GATHERING_MINERALS = 0
     COLLECTING_REFINERY_1 = 1
@@ -101,7 +107,6 @@ class MyAgent(IDABot):
     def start_gathering(self):
         base_locations = sorted(self.base_location_manager.get_occupied_base_locations(PLAYER_SELF))
         refineries = sorted(self.get_my_refineries(), key=lambda refinery_id: refinery_id.id)
-        my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
         worker_dict = self.worker_dict
         for worker in worker_dict:
             if worker.is_idle:
@@ -126,7 +131,7 @@ class MyAgent(IDABot):
         for worker in workers:
             if worker.is_constructing(supply_depot):
                 constructing_workers.append(worker)
-        if (self.current_supply >= self.max_supply - 2 or self.need_more_supply) and self.can_afford(supply_depot):
+        if (self.current_supply >= self.max_supply - 3 or self.need_more_supply) and self.can_afford(supply_depot):
             self.need_more_supply = False
             if len(constructing_workers) == 0:
                 worker = random.choice(workers)
@@ -135,16 +140,17 @@ class MyAgent(IDABot):
     def build_refineries(self):
         my_workers = self.get_my_workers()
         base_location = self.get_starting_base()
-        geyser_location = base_location.geysers # [base_location.geysers for geyser in base_location.geysers if self.get_refinery(geyser) is None]
+        geyser_location = sorted(base_location.geysers, key = lambda geyser_id: geyser_id.id) # [base_location.geysers for geyser in base_location.geysers if self.get_refinery(geyser) is None]
         refinery_type = UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)
         constructing_workers = []
-        build_location = random.choice(geyser_location)
-        for worker in my_workers:
-            if worker.is_constructing(refinery_type):
-                constructing_workers.append(worker)
-        if len(constructing_workers) == 0 and self.can_afford(refinery_type) and self.get_refinery(build_location) == None and self.max_supply >= 23:
-            worker = random.choice(my_workers)
-            worker.build_target(refinery_type, build_location)
+        for index, build_location in enumerate(geyser_location):
+            for worker in my_workers:
+                if worker.is_constructing(refinery_type):
+                    constructing_workers.append(worker)
+            if len(constructing_workers) == 0 and self.can_afford(refinery_type) and self.get_refinery(build_location) == None and self.max_supply >= 23:
+                worker = random.choice(my_workers)
+                worker.build_target(refinery_type, build_location)
+                self.worker_dict[worker][0] = index +1
 
 
     def request_workers(self):
