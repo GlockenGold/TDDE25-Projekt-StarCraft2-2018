@@ -9,9 +9,12 @@ class MyAgent(IDABot):
     def __init__(self):
         IDABot.__init__(self)
         self.need_more_supply = False
-        self.requested_unit_counts = {}
+        self.sought_unit_counts = {}
+        self.unit_counter = {}
+        self.amount_training = {}
         self.game_ticker = 0
         self.worker_dict ={}
+        self.combat_dict = {}
         self.count_bases = 0
         self.count_miners = 0
         self.count_gas_collectors = 0
@@ -19,6 +22,7 @@ class MyAgent(IDABot):
         self.count_combat_units = 0
         self.count_refineries = 0
         self.count_depots = 0
+        self.closest_choke = Point2D(116, 44)
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -26,13 +30,20 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         self.get_worker_dict()
+        self.set_combat_dict()
         self.print_unit_overview()
         self.print_debug()
         self.start_gathering()
         self.request_workers()
-        if self.game_ticker == 0:
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self),8)
+        if(self.game_ticker == 0):
+            self.set_choke_point
+            self.initiate_unit_counter()
             self.deselect_command_centers()
-        if self.game_ticker % 2 == 0:
+        else:
+            self.count_units()
+            self.execute_combat_jobs()
+        if(self.game_ticker % 2 == 0):
             self.train_requests()
         if self.game_ticker % 5 == 0:
             self.build_refineries()
@@ -97,13 +108,6 @@ class MyAgent(IDABot):
         for command_center in command_centers:
             command_center.right_click(command_center)
 
-    def train_requests(self):
-        # print(self.requested_unit_counts)
-        for unit_type in self.requested_unit_counts:
-            if self.requested_unit_counts[unit_type]>0:
-                amount_trained = self.train_unit(unit_type, self.requested_unit_counts[unit_type])
-                self.requested_unit_counts[unit_type]= self.requested_unit_counts[unit_type] - amount_trained
-
     def get_starting_base(self):
         return self.base_location_manager.get_player_starting_base_location(PLAYER_SELF)
 
@@ -114,6 +118,34 @@ class MyAgent(IDABot):
                 workers.append(unit)
 
         return workers
+
+    def set_combat_dict(self):
+        new_combat_units = sorted([unit for unit in self.get_my_units() \
+                if unit.unit_type.is_combat_unit and unit not in self.combat_dict], key = lambda unit_id: unit_id.id)
+        for new_unit in new_combat_units:
+            self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
+
+    DEFEND = 0
+
+    def get_combat_job(self, unit_type):
+        return self.DEFEND
+
+    def execute_combat_jobs(self):
+        for unit in self.combat_dict:
+            job = self.combat_dict[unit]
+            if job == self.DEFEND:
+                unit.move(self.closest_choke)
+
+    def set_choke_point(self):
+        def squared_distance(p1: Point2D, p2: Point2D) -> float:
+            return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
+        choke_1 = Point2D(116, 44)
+        choke_2 = Point2D(35, 123)
+        starting_pos = self.get_starting_base().position
+        if squared_distance(choke_1, starting_pos) < squared_distance(choke_2, starting_pos):
+            self.closest_choke = choke_1
+        else:
+            self.closest_choke = choke_2
 
     def get_worker_dict(self):
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
@@ -204,21 +236,56 @@ class MyAgent(IDABot):
                 worker.build_target(refinery_type, build_location)
                 self.worker_dict[worker][0] = index + 1
 
-    def request_workers(self):
-        starting_base_location = self.get_starting_base()
-        base_locations = self.base_location_manager.get_occupied_base_locations(PLAYER_SELF)
+    def initiate_unit_counter(self):
+        for worker in self.get_my_workers():
+            self.add_counted_unit(worker)
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
-        # TODO: För flera baser.
-        my_workers = self.get_my_workers()
-        for base in base_locations:
-            amount_wanted = 2 * len(base.minerals) + 2 * len(self.get_my_refineries()) - len(my_workers)
-            self.requested_unit_counts[scv_type] = amount_wanted
 
-    def request_unit(self,requested_type):
-        self.requested_unit_counts[requested_type] = self.requested_unit_counts.get(requested_type, 0) + 1
+    def add_counted_unit(self, unit):
+        if unit.unit_type not in self.unit_counter:
+            self.unit_counter[unit.unit_type] = [unit]
+        else:
+            self.unit_counter[unit.unit_type].append(unit)
 
-    def get_requested_amount(self,unit_type):
-        return self.requested_unit_counts.get(unit_type, 0)
+
+    def count_units(self):
+        units_to_count = [unit for unit in self.get_my_units() if unit.unit_type in self.sought_unit_counts]
+        for unit in units_to_count:
+            if unit not in self.unit_counter[unit.unit_type]:
+                self.unit_counter[unit.unit_type].append(unit)
+                self.add_training(unit.unit_type,-1)
+        for unit_type in self.unit_counter:
+            for unit in self.unit_counter[unit_type]:
+                if not unit.is_alive:
+                    self.unit_counter[unit_type].remove(unit)
+
+    def train_requests(self):
+        for unit_type in self.sought_unit_counts:
+            amount_wanted = self.sought_unit_counts[unit_type] - self.amount_living(unit_type) - self.amount_training[unit_type]
+            if amount_wanted > 0:
+                amount_trained = self.train_unit(unit_type, amount_wanted)
+                self.add_training(unit_type,amount_trained)
+
+    def amount_living(self,unit_type):
+        return len(self.unit_counter[unit_type])
+
+    def add_training(self, unit_type: UnitType, amount = 1):
+        self.amount_training[unit_type] = self.amount_training.get(unit_type, 0) + amount
+
+    def request_workers(self):
+        scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
+        amount_wanted = 0
+        amount_wanted += 3 * len(self.get_my_refineries())
+        for base_location in self.base_location_manager.get_occupied_base_locations(PLAYER_SELF):
+            amount_wanted +=  2 * len(base_location.minerals)
+        self.request_unit_amount(scv_type, amount_wanted)
+
+    def request_unit_amount(self, unit_type, amount_sought):
+        self.sought_unit_counts[unit_type] = amount_sought
+        if unit_type not in self.amount_training:
+            self.amount_training[unit_type] = 0
+        if unit_type not in self.unit_counter:
+            self.unit_counter[unit_type] = []
 
     def train_unit(self, unit_type: UnitType, amount_requested):
         """
@@ -229,8 +296,7 @@ class MyAgent(IDABot):
         producers = self.get_my_producers(unit_type)
         amount_trained = 0
         for producer in producers:
-            # print(producer.is_training)
-            if not producer.is_training:
+            if not producer.is_training and producer.is_completed:
                 if not self.supply_is_sufficient(unit_type):
                     self.need_more_supply = True
                 elif self.can_afford(unit_type) and amount_requested-amount_trained>0:
@@ -303,7 +369,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
