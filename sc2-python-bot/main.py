@@ -18,6 +18,7 @@ class MyAgent(IDABot):
         self.count_bases = 0
         self.count_workers = 0
         self.count_barracks = 0
+        self.count_bunkers = 0
         self.count_combat_units = 0
         self.count_refineries = 0
         self.count_depots = 0
@@ -53,6 +54,7 @@ class MyAgent(IDABot):
             self.build_depots()
             self.build_barracks()
             self.expand()
+            self.build_bunkers()
         self.start_gathering()
         self.game_ticker+=1
 
@@ -85,6 +87,7 @@ class MyAgent(IDABot):
         self.count_combat_units = 0
         self.count_refineries = 0
         self.count_depots = 0
+        self.count_bunkers = 0
         for unit in self.my_units:
             if unit.unit_type.is_refinery:
                 self.count_refineries += 1
@@ -94,6 +97,8 @@ class MyAgent(IDABot):
                 self.count_depots +=1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self):
                 self.count_barracks +=1
+            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER,self):
+                self.count_bunkers +=1
         overview_string = " Bases: {} \n Workers: {} \n Refineries: {} \n Combat Units {} \n " \
                           "Supply Depots: {} \n Barracks: {}".format(self.count_bases, self.count_workers, self.count_refineries,
                                                                      self.count_combat_units, self.count_depots,
@@ -101,7 +106,7 @@ class MyAgent(IDABot):
         self.map_tools.draw_text_screen(0.005,0.005,overview_string, Color.RED)
 
     def deselect_command_centers(self):
-        command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
+        command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV,self))
         for command_center in command_centers:
             command_center.right_click(command_center)
 
@@ -162,7 +167,7 @@ class MyAgent(IDABot):
         base_locations = self.my_bases
         minerals = []
         for base_number in range(len(base_locations)):
-            minerals.append(base_locations[base_number].minerals)
+            minerals.append(self.get_mineral_fields(base_locations[base_number]))
             mineral_workers =[scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.GATHERING_MINERALS and
                               self.worker_dict[scv][1] == base_number]
             mineral_condition = len(mineral_workers) < len(minerals[base_number]) * 2
@@ -195,10 +200,21 @@ class MyAgent(IDABot):
                 base_number = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
                     worker.right_click(random.choice(self.get_mineral_fields(base_locations[base_number])))
-                elif job == self.COLLECTING_REFINERY_1:
+                elif job == self.COLLECTING_REFINERY_1 and refineries[base_number*2]:
                     worker.right_click(refineries[base_number*2])
-                elif job == self.COLLECTING_REFINERY_2:
+                elif job == self.COLLECTING_REFINERY_2 and refineries[base_number*2 + 1]:
                     worker.right_click(refineries[base_number*2 + 1])
+
+    def build_bunkers(self):
+        chokepoints = self.closest_chokes
+        base_locations = self.my_bases
+        workers = list(self.worker_dict.keys())
+        bunker_type = UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)
+        if self.count_bunkers < self.count_bases and self.can_afford(bunker_type) and self.count_barracks >= self.count_bases:
+            for index in range(len(base_locations)):
+                if chokepoints[index] != bunker_type:
+                    random.choice(workers).build(bunker_type, Point2DI(int(chokepoints[index].x),
+                                                                       int(chokepoints[index].y)))
 
     def build_barracks(self):
         workers = self.get_my_workers()
@@ -412,7 +428,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
