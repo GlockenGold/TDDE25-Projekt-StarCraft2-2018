@@ -1,2 +1,5 @@
 *.idea/*
 */venv/*
+sc2-python-bot/.git
+sc2-python-bot/.gitignore
+sc2-python-bot/.idea/*
