@@ -32,12 +32,12 @@ class MyAgent(IDABot):
         IDABot.on_step(self)
         if self.game_ticker == 0:
             self.set_choke_point()
-            self.deselect_command_centers()
             self.initiate_unit_counter()
             self.my_bases.append(self.get_starting_base())
         else:
             self.count_units()
             self.execute_combat_jobs()
+        self.deselect_command_centers()
         self.my_units = self.get_my_units()
         self.get_worker_dict()
         self.set_combat_dict()
@@ -58,6 +58,10 @@ class MyAgent(IDABot):
 
     # Ramp south: (115, 46) - (116, 44) - (118, 43)
     # Ramp north: (32, 124) - (35, 123) - (36, 121)
+    # Expo 1 choke north: (43, 99)
+    # Expo 1 choke south: (107, 67)
+    # Expo 2 choke north: (66, 117)
+    # Expo 2 choke south: (84, 50)
 
     def print_debug(self):
         my_units = self.my_units
@@ -68,7 +72,7 @@ class MyAgent(IDABot):
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
                 if job == self.GATHERING_MINERALS:
-                    debug_string = "<{}>".format("Miner")
+                    debug_string = "<{}: {}>".format("Miner", unit.position)
                     self.map_tools.draw_text(unit.position, debug_string, Color.BLUE)
                 elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
                     debug_string = "<{}>".format("Gas Collector")
@@ -177,7 +181,7 @@ class MyAgent(IDABot):
                 job = worker_dict[worker][0]
                 base_number = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
-                    worker.right_click(random.choice(base_locations[base_number].minerals))
+                    worker.right_click(random.choice(self.get_mineral_fields(base_locations[base_number])))
                 elif job == self.COLLECTING_REFINERY_1:
                     worker.right_click(refineries[base_number*2])
                 elif job == self.COLLECTING_REFINERY_2:
@@ -187,50 +191,52 @@ class MyAgent(IDABot):
         workers = self.get_my_workers()
         constructing_workers = []
         barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
-        base_location = self.get_starting_base().depot_position
-
-        for worker in workers:
-            if worker.is_constructing(barracks_type):
-                constructing_workers.append(worker)
-        if len(constructing_workers) == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
-                and self.count_barracks == 0:
-            build_location = self.building_placer.get_build_location_near(base_location, barracks_type)
-            worker = random.choice(workers)
-            worker.build(barracks_type, build_location)
+        base_location = self.my_bases
+        for base in base_location:
+            for worker in workers:
+                if worker.is_constructing(barracks_type):
+                    constructing_workers.append(worker)
+            if len(constructing_workers) == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
+                    and self.count_barracks == 0:
+                build_location = self.building_placer.get_build_location_near(base.depot_position, barracks_type)
+                worker = random.choice(workers)
+                worker.build(barracks_type, build_location)
 
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
         workers = self.get_my_workers()
         constructing_workers = []
         supply_depot = UnitType(UNIT_TYPEID.TERRAN_SUPPLYDEPOT, self)
-        base_location = self.get_starting_base().depot_position
-
-        for worker in workers:
-            if worker.is_constructing(supply_depot):
-                constructing_workers.append(worker)
-        if (self.current_supply >= self.max_supply - 3 or self.need_more_supply) and self.can_afford(supply_depot):
-            self.need_more_supply = False
-            if len(constructing_workers) == 0:
-                build_location = self.building_placer.get_build_location_near(base_location, supply_depot)
-                worker = random.choice(workers)
-                worker.build(supply_depot, build_location)
+        base_location = self.my_bases
+        for base in base_location:
+            for worker in workers:
+                if worker.is_constructing(supply_depot):
+                    constructing_workers.append(worker)
+            if (self.current_supply >= self.max_supply - 3 or self.need_more_supply) and self.can_afford(supply_depot):
+                self.need_more_supply = False
+                if len(constructing_workers) == 0:
+                    build_location = self.building_placer.get_build_location_near(base.depot_position, supply_depot)
+                    worker = random.choice(workers)
+                    worker.build(supply_depot, build_location)
 
     def build_refineries(self):
         my_workers = self.get_my_workers()
-        base_location = self.get_starting_base()
-        geyser_location = sorted(base_location.geysers, key=lambda geyser_id: geyser_id.id)
+        base_locations = self.my_bases
         refinery_type = UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)
         constructing_workers = []
-        for index, build_location in enumerate(geyser_location):
-            for worker in my_workers:
-                if worker.is_constructing(refinery_type):
-                    constructing_workers.append(worker)
-            if len(constructing_workers) == 0 and self.can_afford(refinery_type) \
-                    and self.get_refinery(build_location) is None and self.max_supply >= 23:
-                worker = random.choice(my_workers)
-                worker.build_target(refinery_type, build_location)
-                self.worker_dict[worker][0] = index + 1
-                break
+        for base in base_locations:
+            geyser_location = self.get_geysers(base)
+            # sorted(base_location.geysers, key=lambda geyser_id: geyser_id.id)
+            for index, build_location in enumerate(geyser_location):
+                for worker in my_workers:
+                    if worker.is_constructing(refinery_type):
+                        constructing_workers.append(worker)
+                if len(constructing_workers) == 0 and self.can_afford(refinery_type) \
+                        and self.get_refinery(build_location) is None and self.max_supply >= 23:
+                    worker = random.choice(my_workers)
+                    worker.build_target(refinery_type, build_location)
+                    self.worker_dict[worker][0] = index + 1
+                    break
 
     def initiate_unit_counter(self):
         for worker in self.get_my_workers():
@@ -242,7 +248,6 @@ class MyAgent(IDABot):
             self.unit_counter[unit.unit_type] = [unit]
         else:
             self.unit_counter[unit.unit_type].append(unit)
-
 
     def count_units(self):
         units_to_count = [unit for unit in self.get_my_units() if unit.unit_type in self.sought_unit_counts]
@@ -368,9 +373,30 @@ class MyAgent(IDABot):
             worker.build(command_centre_type, build_location.depot_position)
             self.my_bases.append(build_location)
 
+    def get_mineral_fields(self, base_location: BaseLocation): # -> List[Unit]:
+        """ Given a base_location, this method will find and return a list of all mineral fields (Unit) for that base """
+        mineral_fields = []
+        for mineral_field in base_location.mineral_fields:
+            for unit in self.get_all_units():
+                if unit.unit_type.is_mineral \
+                        and mineral_field.tile_position.x == unit.tile_position.x \
+                        and mineral_field.tile_position.y == unit.tile_position.y:
+                    mineral_fields.append(unit)
+        return mineral_fields
+
+    def get_geysers(self, base_location: BaseLocation): # -> List[Unit]:
+        geysers = []
+        for geyser in base_location.geysers:
+            for unit in self.get_all_units():
+                if unit.unit_type.is_geyser \
+                        and geyser.tile_position.x == unit.tile_position.x \
+                        and geyser.tile_position.y == unit.tile_position.y:
+                    geysers.append(unit)
+        return geysers
+
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 

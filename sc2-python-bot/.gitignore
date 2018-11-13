@@ -3,7 +3,7 @@ __pycache__/
 # You should download the library file, not store it in version control
 *.pyd
 *.pyc
-
+*venv/
 # files in .idea/
 workspace.xml
 usage.statistics.xml
