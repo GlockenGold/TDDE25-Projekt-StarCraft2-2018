@@ -23,7 +23,7 @@ class MyAgent(IDABot):
         self.count_depots = 0
         self.my_units = []
         self.my_bases = []
-        self.closest_choke = Point2D(116, 44)
+        self.closest_chokes = [Point2D(116, 44)]
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -31,7 +31,7 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         if self.game_ticker == 0:
-            self.set_choke_point()
+            self.set_choke_points()
             self.initiate_unit_counter()
             self.my_bases.append(self.get_starting_base())
         else:
@@ -45,7 +45,7 @@ class MyAgent(IDABot):
         self.print_debug()
         self.print_unit_overview()
         self.request_workers()
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self),8)
+        self.request_marines()
         if self.game_ticker % 2 == 0:
             self.train_requests()
         if self.game_ticker % 5 == 0:
@@ -117,32 +117,45 @@ class MyAgent(IDABot):
         return workers
 
     def set_combat_dict(self):
-        new_combat_units = sorted([unit for unit in self.get_my_units() \
-                if unit.unit_type.is_combat_unit and unit not in self.combat_dict], key = lambda unit_id: unit_id.id)
+        new_combat_units = [unit for unit in self.get_my_units() \
+                if unit.unit_type.is_combat_unit and unit not in self.combat_dict]
         for new_unit in new_combat_units:
             self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
 
     DEFEND = 0
 
     def get_combat_job(self, unit_type):
-        return self.DEFEND
+        if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
+            for base_index, base in enumerate(self.my_bases):
+                job = (self.DEFEND, base_index)
+                if self.count_combat_job(job) <8:
+                    return job
+
+    def count_combat_job(self,job):
+        return len([unit for unit in self.combat_dict if self.combat_dict[unit] == job])
 
     def execute_combat_jobs(self):
-        for unit in self.combat_dict:
-            job = self.combat_dict[unit]
-            if job == self.DEFEND:
-                unit.move(self.closest_choke)
-
-    def set_choke_point(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-        choke_1 = Point2D(116, 44)
-        choke_2 = Point2D(35, 123)
+        for unit in self.combat_dict:
+            job = self.combat_dict[unit]
+            if job[0] == self.DEFEND and unit.is_idle:
+                assigned_choke = self.closest_chokes[job[1]]
+                if squared_distance(unit.position, assigned_choke) > 7:
+                    unit.move(assigned_choke)
+
+    def set_choke_points(self):
+        def squared_distance(p1: Point2D, p2: Point2D) -> float:
+            return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
+        choke_south = Point2D(116, 44)
+        choke_north = Point2D(35, 123)
         starting_pos = self.get_starting_base().position
-        if squared_distance(choke_1, starting_pos) < squared_distance(choke_2, starting_pos):
-            self.closest_choke = choke_1
+        if squared_distance(choke_south, starting_pos) < squared_distance(choke_north, starting_pos):
+            self.closest_chokes = [choke_south, Point2D(107, 67), Point2D(84, 50), Point2D(76, 85), Point2D(56,76)
+                , Point2D(122,101)]
         else:
-            self.closest_choke = choke_2
+            self.closest_chokes = [choke_north, Point2D(43, 99), Point2D(66, 117), Point2D(76,85), Point2D(93,99)
+                , Point2D(29,66)]
 
     def get_worker_dict(self):
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
@@ -273,6 +286,9 @@ class MyAgent(IDABot):
     def add_training(self, unit_type: UnitType, amount = 1):
         self.amount_training[unit_type] = self.amount_training.get(unit_type, 0) + amount
 
+    def request_marines(self):
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases))
+
     def request_workers(self):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
         amount_wanted = 0
@@ -396,7 +412,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -404,7 +420,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    coordinator.set_real_time(True)
+    #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
