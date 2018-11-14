@@ -27,7 +27,7 @@ class MyAgent(IDABot):
         self.my_units = []
         self.my_bases = []
         self.closest_chokes = [Point2D(116, 44)]
-        
+
     def on_game_start(self):
         IDABot.on_game_start(self)
 
@@ -118,7 +118,7 @@ class MyAgent(IDABot):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
         for command_center in command_centers:
             command_center.right_click(command_center)
-            if command_center.is_completed:
+            if command_center.is_completed or command_center.is_being_constructed:
                 for base in self.base_location_manager.get_occupied_base_locations(PLAYER_SELF):
                     if base.contains_position(command_center.position) and base not in self.my_bases:
                         self.my_bases.append(base)
@@ -166,7 +166,6 @@ class MyAgent(IDABot):
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-
         choke_south = Point2D(115, 43)
         choke_north = Point2D(35, 125)
         starting_pos = self.get_starting_base().position
@@ -248,12 +247,13 @@ class MyAgent(IDABot):
         base_locations = self.my_bases
         workers = list(self.worker_dict.keys())
         bunker_type = UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)
-        if self.count_bunkers < self.count_bases and self.can_afford(
-                bunker_type) and self.count_barracks >= self.count_bases:
+        if self.count_bunkers < self.count_bases and self.can_afford(bunker_type) \
+                and self.count_barracks >= self.count_bases and self.count_bunkers <= len(chokepoints):
             for index in range(len(base_locations)):
                 if chokepoints[index] != bunker_type:
                     random.choice(workers).build(bunker_type, Point2DI(int(chokepoints[index].x),
                                                                        int(chokepoints[index].y)))
+                    break
 
     def build_barracks(self):
         workers = self.get_my_workers()
@@ -437,8 +437,8 @@ class MyAgent(IDABot):
     def expand(self):
         command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
         number_of_bases = self.count_bases
-        expansion_condition = (self.count_workers >= 21*number_of_bases and self.count_barracks >= 1
-                               and self.can_afford(command_centre_type) and self.count_combat_units >= 8)
+        expansion_condition = (self.count_workers >=21*number_of_bases and self.count_barracks >= 1
+                               and self.can_afford(command_centre_type) and number_of_bases < 3)
         if expansion_condition:
             build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
             worker = random.choice(self.get_my_workers())
@@ -469,7 +469,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -477,7 +477,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    coordinator.set_real_time(True)
+    #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
