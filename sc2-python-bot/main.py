@@ -1,6 +1,5 @@
 import os
 import random
-from _testbuffer import ndarray
 
 from typing import Optional
 from library import *
@@ -33,14 +32,13 @@ class MyAgent(IDABot):
 
     def on_step(self):
         IDABot.on_step(self)
+        self.my_units = sorted(self.get_my_units(), key=lambda unit: unit.id)
         if self.game_ticker == 0:
             self.set_choke_points()
-            self.initiate_unit_counter()
-        else:
+        elif self.game_ticker %2 == 0:
             self.count_units()
             self.execute_combat_jobs()
         self.manage_command_centers()
-        self.my_units = self.get_my_units()
         self.get_worker_dict()
         self.set_combat_dict()
         self.print_debug()
@@ -84,7 +82,7 @@ class MyAgent(IDABot):
                 if job == self.GATHERING_MINERALS:
                     debug_string = "<{}: {}>".format("Miner", unit.position)
                     self.map_tools.draw_text(unit.position, debug_string, Color.BLUE)
-                elif job == self.COLLECTING_REFINERY_1 or self.COLLECTING_REFINERY_2:
+                elif job == self.COLLECTING_GAS:
                     debug_string = "<{}>".format("Gas Collector")
                     self.map_tools.draw_text(unit.position, debug_string, Color.GREEN)
 
@@ -138,36 +136,50 @@ class MyAgent(IDABot):
         return workers
 
     def set_combat_dict(self):
-        new_combat_units = [unit for unit in self.my_units
-                            if unit.unit_type.is_combat_unit and unit not in self.combat_dict]
+        old_units = list(self.combat_dict.keys())
+        for combat_unit in old_units:
+            if not combat_unit.is_alive:
+                self.combat_dict.pop(combat_unit)
+        new_combat_units = [unit for unit in self.my_units \
+                if unit.unit_type.is_combat_unit and unit not in self.combat_dict]
         for new_unit in new_combat_units:
             self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
 
-    DEFEND = 0
+    DEFEND_CHOKE = 0
+    DEFEND_BUNKER = 1
     STANDBY = 2
 
     def get_combat_job(self, unit_type):
-        # if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
+        if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
+            for bunker_index in range(self.count_bunkers):
+                job = (self.DEFEND_BUNKER, bunker_index)
+                if self.count_combat_job(job) < 4:
+                    return job
         for base_index, base in enumerate(self.my_bases):
-            job = (self.DEFEND, base_index)
-            if self.count_combat_job(job) < 8:
+            job = (self.DEFEND_CHOKE, base_index)
+            if self.count_combat_job(job) < 4:
                 return job
-        job = (self.STANDBY, 0)
-        return job
+        return (self.STANDBY, 0)
 
     def count_combat_job(self, job):
         return len([unit for unit in self.combat_dict if self.combat_dict[unit] == job])
 
     def execute_combat_jobs(self):
+        #TODO: separera bunkerplats och unit-plats i chokes. Gör standby mindre värdelös och siege mode på tanks.
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-
         for unit in self.combat_dict:
             job = self.combat_dict[unit]
-            if job[0] == self.DEFEND and unit.is_idle:
+            if job[0] == self.DEFEND_CHOKE and unit.is_idle:
                 assigned_choke = self.closest_chokes[job[1]]
                 if squared_distance(unit.position, assigned_choke) > 7:
-                    unit.move(assigned_choke)
+                    unit.attack_move(assigned_choke)
+            if job[0] == self.DEFEND_BUNKER and unit.is_idle:
+                my_bunkers = [unit for unit in self.my_units if \
+                              unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER,self)]
+                assigned_bunker = my_bunkers[job[1]]
+                if assigned_bunker.is_completed:
+                    unit.right_click(assigned_bunker)
 
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -183,48 +195,66 @@ class MyAgent(IDABot):
                 , Point2D(29, 66)]
 
     def get_worker_dict(self):
+        old_workers = list(self.worker_dict.keys())
+        for worker in old_workers:
+            job = self.worker_dict[worker]
+            over_saturated = (job[0] == self.GATHERING_MINERALS and \
+                self.count_worker_job(job) > 2*len(self.get_mineral_fields(self.my_bases[job[1]]))) or \
+                             (job[0] == self.COLLECTING_GAS and self.count_worker_job(job) > 3)
+            if not worker.is_alive or over_saturated:
+                self.worker_dict.pop(worker)
+            if over_saturated:
+                worker.stop()
+
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
         base_locations = self.my_bases
-        minerals = []
-        for base_number in range(len(base_locations)):
-            minerals.append(self.get_mineral_fields(base_locations[base_number]))
-            mineral_workers = [scv for scv in self.worker_dict if
-                               self.worker_dict[scv][0] == self.GATHERING_MINERALS and
-                               self.worker_dict[scv][1] == base_number]
-            mineral_condition = len(mineral_workers) < len(minerals[base_number]) * 2
-            gas_workers_1 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_1
-                             and self.worker_dict[scv][1] == base_number]
-            gas_condition_1 = len(gas_workers_1) < 3
-            gas_workers_2 = [scv for scv in self.worker_dict if self.worker_dict[scv][0] == self.COLLECTING_REFINERY_2
-                             and self.worker_dict[scv][1] == base_number]
-            gas_condition_2 = len(gas_workers_2) < 3
-            for worker in my_workers:
-                if worker not in self.worker_dict:
-                    if mineral_condition:
-                        self.worker_dict[worker] = [self.GATHERING_MINERALS, base_number]
-                    elif gas_condition_1:
-                        self.worker_dict[worker] = [self.COLLECTING_REFINERY_1, base_number]
-                    elif gas_condition_2:
-                        self.worker_dict[worker] = [self.COLLECTING_REFINERY_2, base_number]
+        needed_gas_collectors = []
+        for refinery_index, refinery in enumerate(self.get_my_refineries()):
+            job = (self.COLLECTING_GAS, refinery_index)
+            needed_gas_collectors.append(3 - self.count_worker_job(job))
+        needed_miners = []
+        for base_number, base in enumerate(base_locations):
+            minerals = self.get_mineral_fields(base)
+            mineral_workers = self.count_worker_job((self.GATHERING_MINERALS, base_number))
+            needed_miners.append(len(minerals) * 2 - mineral_workers)
+        for worker in my_workers:
+            if worker not in self.worker_dict:
+                for base_number, base in enumerate(base_locations):
+                    if needed_miners[base_number] > 0:
+                        self.worker_dict[worker] = (self.GATHERING_MINERALS, base_number)
+                        needed_miners[base_number] -= 1
+                        break
+                    if base_number * 2 < len(needed_gas_collectors) and needed_gas_collectors[base_number * 2] > 0 :
+                        self.worker_dict[worker] = (self.COLLECTING_GAS, base_number*2)
+                        needed_gas_collectors[base_number * 2] -= 1
+                        break
+                    if base_number * 2 + 1 < len(needed_gas_collectors) and needed_gas_collectors[base_number*2 +1] > 0:
+                        self.worker_dict[worker] = (self.COLLECTING_GAS, base_number * 2 + 1)
+                        needed_gas_collectors[base_number * 2 + 1] -= 1
+                        break
+
 
     GATHERING_MINERALS = 0
-    COLLECTING_REFINERY_1 = 1
-    COLLECTING_REFINERY_2 = 2
+    COLLECTING_GAS = 1
+
+    def count_worker_job(self,job):
+        return len([worker for worker in self.worker_dict if self.worker_dict[worker] == job])
 
     def start_gathering(self):
+        #TODO: fixa refinery. Fel antal workers.
         base_locations = self.my_bases
         refineries = sorted(self.get_my_refineries(), key=lambda refinery_id: refinery_id.id)
         worker_dict = self.worker_dict
-        for worker in worker_dict:
+        for worker in list(worker_dict.keys()):
             if worker.is_idle:
                 job = worker_dict[worker][0]
-                base_number = worker_dict[worker][1]
+                job_index = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
-                    worker.right_click(random.choice(self.get_mineral_fields(base_locations[base_number])))
-                elif job == self.COLLECTING_REFINERY_1 and len(refineries) >= base_number * 2 + 1:
-                    worker.right_click(refineries[base_number * 2])
-                elif job == self.COLLECTING_REFINERY_2 and len(refineries) >= base_number * 2 + 2:
-                    worker.right_click(refineries[base_number * 2 + 1])
+                    worker.right_click(random.choice(self.get_mineral_fields(base_locations[job_index])))
+                elif job == self.COLLECTING_GAS and job_index< len(self.get_my_refineries()):
+                    worker.right_click(refineries[job_index])
+                else:
+                    self.worker_dict.pop(worker)
 
     def build_factory(self):
         base_locations = self.my_bases
@@ -298,7 +328,7 @@ class MyAgent(IDABot):
         base_locations = self.my_bases
         refinery_type = UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)
         constructing_workers = []
-        for base_index, base in enumerate(base_locations):
+        for base in base_locations:
             geyser_location = self.get_geysers(base)
             for index, build_location in enumerate(geyser_location):
                 for worker in my_workers:
@@ -308,13 +338,8 @@ class MyAgent(IDABot):
                         and self.get_refinery(build_location) is None and self.max_supply >= 23:
                     worker = random.choice(my_workers)
                     worker.build_target(refinery_type, build_location)
-                    self.worker_dict[worker] = [index + 1, base_index]
+                    self.worker_dict[worker] = (self.COLLECTING_GAS, len(self.get_my_refineries()))
                     break
-
-    def initiate_unit_counter(self):
-        for worker in self.get_my_workers():
-            self.add_counted_unit(worker)
-        scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
 
     def add_counted_unit(self, unit):
         if unit.unit_type not in self.unit_counter:
@@ -323,7 +348,7 @@ class MyAgent(IDABot):
             self.unit_counter[unit.unit_type].append(unit)
 
     def count_units(self):
-        units_to_count = [unit for unit in self.get_my_units() if unit.unit_type in self.sought_unit_counts]
+        units_to_count = [unit for unit in self.my_units if unit.unit_type in self.sought_unit_counts]
         for unit in units_to_count:
             if unit not in self.unit_counter[unit.unit_type]:
                 self.unit_counter[unit.unit_type].append(unit)
@@ -332,7 +357,12 @@ class MyAgent(IDABot):
             for unit in self.unit_counter[unit_type]:
                 if not unit.is_alive:
                     self.unit_counter[unit_type].remove(unit)
-
+        for unit_type in self.amount_training:
+            amount_training_producers = len([producer for producer in self.get_my_producers(unit_type) if producer.is_training])
+            if self.amount_training[unit_type] > amount_training_producers:
+                self.amount_training[unit_type] = amount_training_producers
+            if self.amount_training[unit_type] < 0 :
+                self.amount_training[unit_type] = 0
     def train_requests(self):
         for unit_type in self.sought_unit_counts:
             amount_wanted = self.sought_unit_counts[unit_type] - self.amount_living(unit_type) - self.amount_training[unit_type]
@@ -413,7 +443,7 @@ class MyAgent(IDABot):
         """ Returns a list of all refineries (list of Unit) """
         refineries = []
         for unit in self.my_units:
-            if unit.unit_type.is_refinery:
+            if unit.unit_type.is_refinery and unit.is_completed:
                 refineries.append(unit)
         return refineries
 
@@ -478,7 +508,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -486,7 +516,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    #coordinator.set_real_time(True)
+    coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
