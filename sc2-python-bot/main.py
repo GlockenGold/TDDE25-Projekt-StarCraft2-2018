@@ -45,8 +45,6 @@ class MyAgent(IDABot):
         self.set_combat_dict()
         self.print_debug()
         self.print_unit_overview()
-        self.request_workers()
-        self.request_marines()
         if self.game_ticker % 2 == 0:
             self.train_requests()
         if self.game_ticker % 5 == 0:
@@ -57,11 +55,16 @@ class MyAgent(IDABot):
             self.build_bunkers()
             self.build_factory()
             self.build_factory_tech_lab()
+            self.request_workers()
+            self.request_marines()
+            self.request_tanks()
         self.start_gathering()
         self.game_ticker+=1
 
     # Ramp south: (115, 46) - (115, 43) - (118, 43)
     # Ramp north: (32, 124) - (35, 125) - (36, 121)
+    # Ramp Expo South (116, 54)
+    # Ramp Expo North (34, 114)
     # Expo 1 choke north: (43, 99)
     # Expo 1 choke south: (107, 67)
     # Expo 2 choke north: (66, 117)
@@ -141,13 +144,16 @@ class MyAgent(IDABot):
             self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
 
     DEFEND = 0
+    STANDBY = 2
 
     def get_combat_job(self, unit_type):
-        if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
-            for base_index, base in enumerate(self.my_bases):
-                job = (self.DEFEND, base_index)
-                if self.count_combat_job(job) < 8:
-                    return job
+        # if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
+        for base_index, base in enumerate(self.my_bases):
+            job = (self.DEFEND, base_index)
+            if self.count_combat_job(job) < 8:
+                return job
+        job = (self.STANDBY, 0)
+        return job
 
     def count_combat_job(self, job):
         return len([unit for unit in self.combat_dict if self.combat_dict[unit] == job])
@@ -343,6 +349,9 @@ class MyAgent(IDABot):
     def request_marines(self):
         # TODO: Funka för flera barracker och stoppa marines i bunkrar
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases))
+
+    def request_tanks(self):
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 2*len(self.my_bases))
 
     def request_workers(self):
         # TODO: Fixa så den bara bygger när CCn är färdig
