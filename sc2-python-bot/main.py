@@ -1,5 +1,6 @@
 import os
 import random
+from _testbuffer import ndarray
 
 from typing import Optional
 from library import *
@@ -22,11 +23,14 @@ class MyAgent(IDABot):
         self.count_combat_units = 0
         self.count_refineries = 0
         self.count_depots = 0
+        self.count_factories = 0
         self.my_units = []
         self.my_bases = []
         self.closest_chokes = [Point2D(116, 44)]
+        
     def on_game_start(self):
         IDABot.on_game_start(self)
+
     def on_step(self):
         IDABot.on_step(self)
         if self.game_ticker == 0:
@@ -51,6 +55,8 @@ class MyAgent(IDABot):
             self.build_barracks()
             self.expand()
             self.build_bunkers()
+            self.build_factory()
+            self.build_factory_tech_lab()
         self.start_gathering()
         self.game_ticker+=1
 
@@ -61,7 +67,7 @@ class MyAgent(IDABot):
     # Expo 2 choke north: (66, 117)
     # Expo 2 choke south: (84, 50)
     # Expo 3 choke south: (76, 85)
-    # Expo 3 choke north: (76, 85)
+    # Expo 3 choke north: (76, 85) Bygg ej bunker här
     # Expo 4 choke south: (56, 76)
     # Expo 4 choke north: (93, 99)
     # Expo 5 choke south: (122, 101)
@@ -87,6 +93,7 @@ class MyAgent(IDABot):
         self.count_refineries = 0
         self.count_depots = 0
         self.count_bunkers = 0
+        self.count_factories = 0
         for unit in self.my_units:
             if unit.unit_type.is_refinery:
                 self.count_refineries += 1
@@ -98,11 +105,13 @@ class MyAgent(IDABot):
                 self.count_barracks += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER, self):
                 self.count_bunkers += 1
+            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_FACTORY, self):
+                self.count_factories += 1
         overview_string = " Bases: {} \n Workers: {} \n Refineries: {} \n Combat Units {} \n " \
-                          "Supply Depots: {} \n Barracks: {}".format(self.count_bases, self.count_workers,
+                          "Supply Depots: {} \n Barracks: {} \n Factories: {}".format(self.count_bases, self.count_workers,
                                                                      self.count_refineries,
                                                                      self.count_combat_units, self.count_depots,
-                                                                     self.count_barracks, )
+                                                                     self.count_barracks, self.count_factories)
         self.map_tools.draw_text_screen(0.005, 0.005, overview_string, Color.RED)
 
     def manage_command_centers(self):
@@ -126,7 +135,7 @@ class MyAgent(IDABot):
         return workers
 
     def set_combat_dict(self):
-        new_combat_units = [unit for unit in self.get_my_units()
+        new_combat_units = [unit for unit in self.my_units
                             if unit.unit_type.is_combat_unit and unit not in self.combat_dict]
         for new_unit in new_combat_units:
             self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
@@ -162,10 +171,10 @@ class MyAgent(IDABot):
         choke_north = Point2D(35, 125)
         starting_pos = self.get_starting_base().position
         if squared_distance(choke_south, starting_pos) < squared_distance(choke_north, starting_pos):
-            self.closest_chokes = [choke_south, Point2D(107, 67), Point2D(84, 50), Point2D(76, 85), Point2D(56, 76)
+            self.closest_chokes = [choke_south, Point2D(107, 67), Point2D(84, 50), Point2D(56, 76)
                 , Point2D(122, 101)]
         else:
-            self.closest_chokes = [choke_north, Point2D(43, 99), Point2D(66, 117), Point2D(76, 85), Point2D(93, 99)
+            self.closest_chokes = [choke_north, Point2D(43, 99), Point2D(66, 117), Point2D(93, 99)
                 , Point2D(29, 66)]
 
     def get_worker_dict(self):
@@ -211,6 +220,28 @@ class MyAgent(IDABot):
                     worker.right_click(refineries[base_number * 2])
                 elif job == self.COLLECTING_REFINERY_2 and len(refineries) >= base_number * 2 + 2:
                     worker.right_click(refineries[base_number * 2 + 1])
+
+    def build_factory(self):
+        base_locations = self.my_bases
+        workers = list(self.worker_dict.keys())
+        factory_type = UnitType(UNIT_TYPEID.TERRAN_FACTORY, self)
+        if self.count_factories < 1 and self.can_afford(factory_type) and self.count_barracks >= self.count_bases:
+            for base in base_locations:
+                build_location = self.building_placer.get_build_location_near(base.depot_position, factory_type)
+                worker = random.choice(workers)
+                worker.build(factory_type, build_location)
+
+    def build_factory_tech_lab(self):
+        factory_type = UnitType(UNIT_TYPEID.TERRAN_FACTORY, self)
+        factory_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_FACTORYTECHLAB, self)
+        if self.count_factories >= 1:
+            for unit in self.my_units:
+                if unit.unit_type == factory_type and unit.is_completed and self.can_afford(factory_tech_lab_type):
+                    self.build_upgrade(unit, factory_tech_lab_type)
+
+    def build_upgrade(self, building, upgrade):  # Unit, UnitType
+        if building.is_completed and self.can_afford(upgrade):
+            building.train(upgrade)
 
     def build_bunkers(self):
         chokepoints = self.closest_chokes
@@ -446,7 +477,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    # coordinator.set_real_time(True)
+    coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
