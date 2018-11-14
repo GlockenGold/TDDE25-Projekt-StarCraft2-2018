@@ -34,15 +34,13 @@ class MyAgent(IDABot):
         if self.game_ticker == 0:
             self.set_choke_points()
             self.initiate_unit_counter()
-            self.my_bases.append(self.get_starting_base())
         else:
             self.count_units()
             self.execute_combat_jobs()
-        self.deselect_command_centers()
+        self.manage_command_centers()
         self.my_units = self.get_my_units()
         self.get_worker_dict()
         self.set_combat_dict()
-        self.print_unit_overview()
         self.print_debug()
         self.print_unit_overview()
         self.request_workers()
@@ -58,19 +56,22 @@ class MyAgent(IDABot):
         self.start_gathering()
         self.game_ticker+=1
 
-    # Ramp south: (115, 46) - (116, 44) - (118, 43)
-    # Ramp north: (32, 124) - (35, 123) - (36, 121)
+    # Ramp south: (115, 46) - (115, 43) - (118, 43)
+    # Ramp north: (32, 124) - (35, 125) - (36, 121)
     # Expo 1 choke north: (43, 99)
     # Expo 1 choke south: (107, 67)
     # Expo 2 choke north: (66, 117)
     # Expo 2 choke south: (84, 50)
+    # Expo 3 choke south: (76, 85)
+    # Expo 3 choke north: (76, 85)
+    # Expo 4 choke south: (56, 76)
+    # Expo 4 choke north: (93, 99)
+    # Expo 5 choke south: (122, 101)
+    # Expo 5 choke north: (29, 66)
 
     def print_debug(self):
-        my_units = self.my_units
-        base_location = self.get_starting_base()
-        my_minerals = base_location.minerals
-        my_geysers = base_location.geysers
-        for index, unit in enumerate(my_units+my_geysers+my_minerals):
+        my_workers = list(self.worker_dict.keys())
+        for unit in my_workers:
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
                 if job == self.GATHERING_MINERALS:
@@ -105,10 +106,14 @@ class MyAgent(IDABot):
                                                                      self.count_barracks, )
         self.map_tools.draw_text_screen(0.005,0.005,overview_string, Color.RED)
 
-    def deselect_command_centers(self):
+    def manage_command_centers(self):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV,self))
         for command_center in command_centers:
             command_center.right_click(command_center)
+            if command_center.is_completed:
+                for base in self.base_location_manager.get_occupied_base_locations(PLAYER_SELF):
+                    if base.contains_position(command_center.position) and base not in self.my_bases:
+                        self.my_bases.append(base)
 
     def get_starting_base(self):
         return self.base_location_manager.get_player_starting_base_location(PLAYER_SELF)
@@ -133,7 +138,7 @@ class MyAgent(IDABot):
         if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
             for base_index, base in enumerate(self.my_bases):
                 job = (self.DEFEND, base_index)
-                if self.count_combat_job(job) <8:
+                if self.count_combat_job(job) < 8:
                     return job
 
     def count_combat_job(self,job):
@@ -152,8 +157,8 @@ class MyAgent(IDABot):
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
-        choke_south = Point2D(116, 44)
-        choke_north = Point2D(35, 123)
+        choke_south = Point2D(115, 43)
+        choke_north = Point2D(35, 125)
         starting_pos = self.get_starting_base().position
         if squared_distance(choke_south, starting_pos) < squared_distance(choke_north, starting_pos):
             self.closest_chokes = [choke_south, Point2D(107, 67), Point2D(84, 50), Point2D(76, 85), Point2D(56,76)
@@ -200,21 +205,21 @@ class MyAgent(IDABot):
                 base_number = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
                     worker.right_click(random.choice(self.get_mineral_fields(base_locations[base_number])))
-                elif job == self.COLLECTING_REFINERY_1 and refineries[base_number*2]:
+                elif job == self.COLLECTING_REFINERY_1 and len(refineries) >= base_number * 2 + 1:
                     worker.right_click(refineries[base_number*2])
-                elif job == self.COLLECTING_REFINERY_2 and refineries[base_number*2 + 1]:
+                elif job == self.COLLECTING_REFINERY_2 and len(refineries) >= base_number * 2 + 2:
                     worker.right_click(refineries[base_number*2 + 1])
 
     def build_bunkers(self):
-        chokepoints = self.closest_chokes
+        choke_points = self.closest_chokes
         base_locations = self.my_bases
         workers = list(self.worker_dict.keys())
         bunker_type = UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)
-        if self.count_bunkers < self.count_bases and self.can_afford(bunker_type) and self.count_barracks >= self.count_bases:
-            for index in range(len(base_locations)):
-                if chokepoints[index] != bunker_type:
-                    random.choice(workers).build(bunker_type, Point2DI(int(chokepoints[index].x),
-                                                                       int(chokepoints[index].y)))
+        if len(constructing_workers) == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 and self.count_barracks < self.count_bases + 1:
+                for index in range(len(base_locations)):
+                if choke_points[index] != bunker_type:
+                    random.choice(workers).build(bunker_type, Point2DI(int(choke_points[index].x),
+                                                                       int(choke_points[index].y)))
 
     def build_barracks(self):
         workers = self.get_my_workers()
@@ -255,7 +260,6 @@ class MyAgent(IDABot):
         constructing_workers = []
         for base in base_locations:
             geyser_location = self.get_geysers(base)
-            # sorted(base_location.geysers, key=lambda geyser_id: geyser_id.id)
             for index, build_location in enumerate(geyser_location):
                 for worker in my_workers:
                     if worker.is_constructing(refinery_type):
@@ -309,8 +313,8 @@ class MyAgent(IDABot):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
         amount_wanted = 0
         amount_wanted += 3 * len(self.get_my_refineries())
-        for base_location in self.base_location_manager.get_occupied_base_locations(PLAYER_SELF):
-            amount_wanted +=  2 * len(base_location.minerals)
+        for base_location in self.my_bases:
+            amount_wanted += 2 * len(base_location.minerals)
         self.request_unit_amount(scv_type, amount_wanted)
 
     def request_unit_amount(self, unit_type, amount_sought):
@@ -397,16 +401,18 @@ class MyAgent(IDABot):
     def expand(self):
         command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
         number_of_bases = self.count_bases
-        build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
-        expansion_condition = (self.count_workers >=21*number_of_bases and self.count_barracks >= 1
-                               and self.can_afford(command_centre_type))
+        expansion_condition = (self.count_workers >= 21*number_of_bases and self.count_barracks >= 1
+                               and self.can_afford(command_centre_type) and self.count_combat_units >= 8)
         if expansion_condition:
+            build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
             worker = random.choice(self.get_my_workers())
             worker.build(command_centre_type, build_location.depot_position)
             self.my_bases.append(build_location)
 
-    def get_mineral_fields(self, base_location: BaseLocation): # -> List[Unit]:
-        """ Given a base_location, this method will find and return a list of all mineral fields (Unit) for that base """
+    def get_mineral_fields(self, base_location: BaseLocation):  # -> List[Unit]: denna del krashar koden, fråga labbass
+        """
+        Given a base_location, this method will find and return a list of all mineral fields (Unit) for that base
+        """
         mineral_fields = []
         for mineral_field in base_location.mineral_fields:
             for unit in self.get_all_units():
@@ -416,7 +422,7 @@ class MyAgent(IDABot):
                     mineral_fields.append(unit)
         return mineral_fields
 
-    def get_geysers(self, base_location: BaseLocation): # -> List[Unit]:
+    def get_geysers(self, base_location: BaseLocation):  # -> List[Unit]:
         geysers = []
         for geyser in base_location.geysers:
             for unit in self.get_all_units():
@@ -428,7 +434,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -436,7 +442,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    #coordinator.set_real_time(True)
+    # coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
