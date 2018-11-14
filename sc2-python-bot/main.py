@@ -55,9 +55,11 @@ class MyAgent(IDABot):
             self.build_bunkers()
             self.build_factory()
             self.build_factory_tech_lab()
+            self.build_barracks_tech_lab()
             self.request_workers()
             self.request_marines()
             self.request_tanks()
+            self.request_marauders()
         self.start_gathering()
         self.game_ticker+=1
 
@@ -249,12 +251,18 @@ class MyAgent(IDABot):
             building.train(upgrade)
 
     def build_bunkers(self):
+        # TODO: Lägg till cosntructing_workers
         chokepoints = self.closest_chokes
         base_locations = self.my_bases
         workers = list(self.worker_dict.keys())
+        constructing_workers = []
         bunker_type = UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)
+        for worker in workers:
+            if worker.is_constructing(bunker_type):
+                constructing_workers.append(worker)
         if self.count_bunkers < self.count_bases and self.can_afford(bunker_type) \
-                and self.count_barracks >= self.count_bases and self.count_bunkers <= len(chokepoints):
+                and self.count_barracks >= self.count_bases and self.count_bunkers <= len(chokepoints) \
+                and len(constructing_workers) == 0:
             for index in range(len(base_locations)):
                 if chokepoints[index] != bunker_type:
                     random.choice(workers).build(bunker_type, Point2DI(int(chokepoints[index].x),
@@ -275,6 +283,14 @@ class MyAgent(IDABot):
                 build_location = self.building_placer.get_build_location_near(base.depot_position, barracks_type)
                 worker = random.choice(workers)
                 worker.build(barracks_type, build_location)
+
+    def build_barracks_tech_lab(self):
+        barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
+        barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
+        if self.count_factories >= 1:
+            for unit in self.my_units:
+                if unit.unit_type == barracks_type and unit.is_completed and self.can_afford(barracks_tech_lab_type):
+                    self.build_upgrade(unit, barracks_tech_lab_type)
 
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
@@ -349,6 +365,9 @@ class MyAgent(IDABot):
     def request_marines(self):
         # TODO: Funka för flera barracker och stoppa marines i bunkrar
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases))
+
+    def request_marauders(self):
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 4*len(self.my_bases))
 
     def request_tanks(self):
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 2*len(self.my_bases))
@@ -478,7 +497,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
