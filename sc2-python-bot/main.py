@@ -25,6 +25,7 @@ class MyAgent(IDABot):
         self.count_factories = 0
         self.my_units = []
         self.my_bases = []
+        self.my_minerals = {} #self.my_minerals[base_id] = list of all minerals connected to that base
         self.closest_chokes = [Point2D(116, 44)]
 
     def on_game_start(self):
@@ -33,12 +34,14 @@ class MyAgent(IDABot):
     def on_step(self):
         IDABot.on_step(self)
         self.my_units = sorted(self.get_my_units(), key=lambda unit: unit.id)
+        self.manage_command_centers()
+        self.get_mineral_list()
         if self.game_ticker == 0:
             self.set_choke_points()
+            self.get_mineral_list()
         elif self.game_ticker %2 == 0:
             self.count_units()
             self.execute_combat_jobs()
-        self.manage_command_centers()
         self.get_worker_dict()
         self.set_combat_dict()
         self.print_debug()
@@ -93,29 +96,26 @@ class MyAgent(IDABot):
         self.count_workers = len(self.worker_dict)
         self.count_barracks = 0
         self.count_combat_units = 0
-        self.count_refineries = 0
         self.count_depots = 0
-        self.count_bunkers = 0
         self.count_factories = 0
         for unit in self.my_units:
-            if unit.unit_type.is_refinery:
-                self.count_refineries += 1
-            elif unit.unit_type.is_combat_unit:
+            if unit.unit_type.is_combat_unit:
                 self.count_combat_units += 1
             elif unit.unit_type.is_supply_provider:
                 self.count_depots += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self):
                 self.count_barracks += 1
-            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER, self):
-                self.count_bunkers += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_FACTORY, self):
                 self.count_factories += 1
-        overview_string = " Bases: {} \n Workers: {} \n Refineries: {} \n Combat Units {} \n " \
+        overview_string = " Bases: {} \n Workers: {} \n Combat Units {} \n " \
                           "Supply Depots: {} \n Barracks: {} \n Factories: {}".format(self.count_bases, self.count_workers,
-                                                                     self.count_refineries,
                                                                      self.count_combat_units, self.count_depots,
                                                                      self.count_barracks, self.count_factories)
         self.map_tools.draw_text_screen(0.005, 0.005, overview_string, Color.RED)
+
+    def get_mineral_list(self):
+        for index, base in enumerate(self.my_bases):
+            self.my_minerals[index] = self.get_mineral_fields(base)
 
     def manage_command_centers(self):
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
@@ -179,9 +179,10 @@ class MyAgent(IDABot):
             if job[0] == self.DEFEND_BUNKER and unit.is_idle:
                 my_bunkers = [unit for unit in self.my_units if \
                               unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER,self)]
-                assigned_bunker = my_bunkers[job[1]]
-                if assigned_bunker.is_completed:
-                    unit.right_click(assigned_bunker)
+                if len(my_bunkers) > 0:
+                    assigned_bunker = my_bunkers[job[1]]
+                    if assigned_bunker.is_completed:
+                        unit.right_click(assigned_bunker)
 
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -200,9 +201,9 @@ class MyAgent(IDABot):
         old_workers = list(self.worker_dict.keys())
         for worker in old_workers:
             job = self.worker_dict[worker]
-            over_saturated = (job[0] == self.GATHERING_MINERALS and \
-                self.count_worker_job(job) > 2*len(self.get_mineral_fields(self.my_bases[job[1]]))) or \
-                             (job[0] == self.COLLECTING_GAS and self.count_worker_job(job) > 3)
+            over_saturated = (job[0] == self.GATHERING_MINERALS and
+                self.count_worker_job(job) > 2*len(self.my_minerals[job[1]]) or \
+                             (job[0] == self.COLLECTING_GAS and self.count_worker_job(job) > 3))
             if not worker.is_alive or over_saturated:
                 self.worker_dict.pop(worker)
             if over_saturated:
@@ -216,7 +217,7 @@ class MyAgent(IDABot):
             needed_gas_collectors.append(3 - self.count_worker_job(job))
         needed_miners = []
         for base_number, base in enumerate(base_locations):
-            minerals = self.get_mineral_fields(base)
+            minerals = self.my_minerals[base_number]
             mineral_workers = self.count_worker_job((self.GATHERING_MINERALS, base_number))
             needed_miners.append(len(minerals) * 2 - mineral_workers)
         for worker in my_workers:
@@ -252,7 +253,7 @@ class MyAgent(IDABot):
                 job = worker_dict[worker][0]
                 job_index = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
-                    worker.right_click(random.choice(self.get_mineral_fields(base_locations[job_index])))
+                    worker.right_click(random.choice(self.my_minerals[job_index]))
                 elif job == self.COLLECTING_GAS and job_index< len(self.get_my_refineries()):
                     worker.right_click(refineries[job_index])
                 else:
@@ -281,7 +282,7 @@ class MyAgent(IDABot):
             building.train(upgrade)
 
     def build_bunkers(self):
-        # TODO: Lägg till cosntructing_workers
+        # TODO: Lägg till cosntructing_workers (printbar)
         chokepoints = self.closest_chokes
         base_locations = self.my_bases
         workers = list(self.worker_dict.keys())
@@ -297,6 +298,7 @@ class MyAgent(IDABot):
                 if chokepoints[index] != bunker_type:
                     random.choice(workers).build(bunker_type, Point2DI(int(chokepoints[index].x),
                                                                        int(chokepoints[index].y)))
+                    self.count_bunkers += 1
                     break
 
     def build_barracks(self):
@@ -354,7 +356,8 @@ class MyAgent(IDABot):
                         and self.get_refinery(build_location) is None and self.max_supply >= 23:
                     worker = random.choice(my_workers)
                     worker.build_target(refinery_type, build_location)
-                    self.worker_dict[worker] = (self.COLLECTING_GAS, len(self.get_my_refineries()))
+                    self.worker_dict[worker] = (self.COLLECTING_GAS, self.count_refineries)
+                    self.count_refineries += 1
                     break
 
     def add_counted_unit(self, unit):
@@ -407,8 +410,8 @@ class MyAgent(IDABot):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
         amount_wanted = 0
         amount_wanted += 3 * len(self.get_my_refineries())
-        for base_location in self.my_bases:
-            amount_wanted += 2 * len(self.get_mineral_fields(base_location))
+        for index, base_location in enumerate(self.my_bases):
+            amount_wanted += 2 * len(self.my_minerals[index])
         self.request_unit_amount(scv_type, amount_wanted)
 
     def request_unit_amount(self, unit_type, amount_sought):
@@ -527,7 +530,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -535,7 +538,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Easy)
 
-    coordinator.set_real_time(True)
+    #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
