@@ -447,6 +447,7 @@ class MyAgent(IDABot):
         if building.is_completed and self.can_afford(upgrade):
             building.train(upgrade)
 
+
     def build_bunkers(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
