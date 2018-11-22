@@ -27,6 +27,8 @@ class MyAgent(IDABot):
         self.count_starports = 0
         self.my_units = []
         self.my_bases = []
+        self.my_bunkers = {}
+        self.attack_points = []
         self.my_minerals = {}  # self.my_minerals[base_id] = list of all minerals connected to that base
         self.closest_chokes = [Point2D(116, 44)]
         self.supply_depot_positions = [Point2DI(43, 149)]
@@ -59,6 +61,7 @@ class MyAgent(IDABot):
         self.set_combat_dict()
         self.print_debug()
         self.print_unit_overview()
+        self.set_my_bunkers()
         if self.game_ticker % 2 == 0:
             self.train_requests()
         if self.game_ticker % 5 == 0:
@@ -80,7 +83,6 @@ class MyAgent(IDABot):
             #self.request_medivacs()
         self.execute_worker_jobs()
         self.game_ticker += 1
-
 
     # Ramp south: (115, 46) - (115, 43) - (118, 43)
     # Ramp north: (32, 124) - (35, 125) - (36, 121)
@@ -147,12 +149,6 @@ class MyAgent(IDABot):
 
     def print_debug(self):
         my_workers = list(self.worker_dict.keys())
-        barracks = list(self.get_my_units())
-        for index, unit in enumerate(barracks):
-            if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self) \
-                    or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SUPPLYDEPOT, self):
-                debug_string = "<{}>".format(unit.position)
-                self.map_tools.draw_text(unit.position, debug_string, Color.TEAL)
         for index, unit in enumerate(my_workers):
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
@@ -173,25 +169,38 @@ class MyAgent(IDABot):
             debug_string = "<{} {}>".format(job[0], job[1])
             self.map_tools.draw_text(combat_unit.position, debug_string, Color.RED)
 
+    def set_my_bunkers(self):
+        bunkers = [unit for unit in self.my_units if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)]
+        old_bunkers = []
+        for old_index in list(self.my_bunkers.keys()):
+            if not self.my_bunkers[old_index].is_alive:
+                del self.my_bunkers[old_index]
+            else:
+                old_bunkers.append(self.my_bunkers[old_index])
+        for bunker_index in range(self.count_bunkers):
+            bunker = bunkers[bunker_index]
+            if bunker_index not in self.my_bunkers and bunker not in old_bunkers:
+                self.my_bunkers[bunker_index] = bunker
+
     def print_unit_overview(self):
-        #todo: printa jobs
         self.count_bases = len(self.my_bases)
         self.count_workers = len(self.worker_dict)
-        self.count_refineries = 0
         self.count_barracks = 0
         self.count_combat_units = 0
         self.count_depots = 0
         self.count_factories = 0
         self.count_bunkers = 0
+        self.count_refineries = 0
+        self.count_engineering_bays = 0
         self.count_starports = 0
-        """count_miners = self.count_worker_job(self.GATHERING_MINERALS)
-        count_gas_collectors =
-        count_builders =
-        count_scouts =
-        count_choke_defenders =
-        count_bunker_bois =
-        count_standby =
-        count attackers ="""
+        count_miners = self.count_worker_job(self.GATHERING_MINERALS)
+        count_gas_collectors = self.count_worker_job(self.COLLECTING_GAS)
+        count_builders = self.count_worker_job(self.CONSTRUCTING)
+        count_scouts = self.count_worker_job(self.SCOUT)
+        count_choke_defenders = self.count_combat_job(self.DEFEND_CHOKE)
+        count_bunker_bois = self.count_combat_job(self.DEFEND_BUNKER)
+        count_standby = self.count_combat_job(self.STANDBY)
+        count_attackers = self.count_combat_job(self.ATTACKING)
         for unit in self.my_units:
             if unit.unit_type.is_combat_unit:
                 self.count_combat_units += 1
@@ -209,16 +218,17 @@ class MyAgent(IDABot):
                 self.count_refineries += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_STARPORT, self) and unit.is_completed:
                 self.count_starports += 1
-        overview_string = " Bases: {} \n Workers: {} \n Refineries: {} \n Combat Units {} \n " "Supply Depots: {} " \
-                          "\n Barracks: {} \n Factories: {} \n Bunkers: {}".format(self.count_bases,
-                                                                                   self.count_workers,
-                                                                                   self.count_refineries,
-                                                                                   self.count_combat_units,
-                                                                                   self.count_depots,
-                                                                                   self.count_barracks,
-                                                                                   self.count_factories,
-                                                                                   self.count_bunkers)
-        self.map_tools.draw_text_screen(0.005, 0.005, overview_string, Color.RED)
+        overview_string = " Unit assignments \n ---------------- \n Miners: {} \n Gas Collectors: {} \n " \
+                          "Builders: {} \n Scouts: {} \n Choke Defenders: {} \n Bunker Defenders: {}" \
+                          " \n Standby Units: {}, \n Attacking Units: {}".format(count_miners,
+                                                                                      count_gas_collectors,
+                                                                                      count_builders,
+                                                                                      count_scouts,
+                                                                                      count_choke_defenders,
+                                                                                      count_bunker_bois,
+                                                                                      count_standby,
+                                                                                      count_attackers)
+        self.map_tools.draw_text_screen(0.005, 0.005, overview_string, Color.WHITE)
 
     def get_mineral_list(self):
         for index, base in enumerate(self.my_bases):
@@ -228,14 +238,21 @@ class MyAgent(IDABot):
         #todo: kolla om deathchecken fungerar.
         command_centers = self.get_my_producers(UnitType(UNIT_TYPEID.TERRAN_SCV, self))
         base_locations = self.base_location_manager.get_occupied_base_locations(PLAYER_SELF)
+        for base in self.my_bases:
+            contains_cc = False
+            for command_center in command_centers:
+                if base.contains_position(command_center.position):
+                    contains_cc = True
+            if not contains_cc:
+                self.my_bases.remove(base)
+
         for command_center in command_centers:
             command_center.right_click(command_center)
             if command_center.is_completed:
                 for base in base_locations:
                     if base.contains_position(command_center.position) and base not in self.my_bases:
                         self.my_bases.append(base)
-            if not command_center.is_alive and command_center in self.my_bases:
-                self.my_bases.remove(command_center)
+
 
 
     def get_starting_base(self):
@@ -256,21 +273,23 @@ class MyAgent(IDABot):
 
     def set_combat_dict(self):
         old_units = list(self.combat_dict.keys())
-        start_attacking = self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 12 and\
-                        self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self)) >= 4
         for combat_unit in old_units:
             if not combat_unit.is_alive:
                 self.combat_dict.pop(combat_unit)
             elif self.combat_dict[combat_unit][0] == self.STANDBY:
-                if start_attacking:
-                    self.combat_dict[combat_unit] = (self.ATTACKING,0)
-                else:
-                    self.combat_dict[combat_unit] = self.get_combat_job(combat_unit.unit_type)
+                self.combat_dict[combat_unit] = self.get_combat_job(combat_unit.unit_type)
         new_combat_units = [unit for unit in self.my_units \
                 if unit.unit_type.is_combat_unit and unit not in self.combat_dict]
         for new_unit in new_combat_units:
             self.combat_dict[new_unit] = self.get_combat_job(new_unit.unit_type)
 
+        start_attacking = (self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 12 and \
+                           self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self)) >= 4)
+        if start_attacking:
+            self.init_attack_points()
+            standby_units = [unit for unit in self.combat_dict if self.combat_dict[unit][0] == self.STANDBY]
+            for unit in standby_units:
+                self.combat_dict[unit] = (self.ATTACKING, 0)
     DEFEND_CHOKE = "defending choke"
     DEFEND_BUNKER = "defending bunker"
     STANDBY = "standby"
@@ -301,9 +320,9 @@ class MyAgent(IDABot):
 
     def count_combat_job(self, job, unit_type = None):
         if not unit_type:
-            job_list = [unit for unit in self.combat_dict if unit.unit_type == unit_type]
-        else:
             job_list = [unit for unit in self.combat_dict]
+        else:
+            job_list = [unit for unit in self.combat_dict if unit.unit_type == unit_type]
         if not isinstance(job, tuple):
             return len([unit for unit in job_list if self.combat_dict[unit][0] == job])
         return len([unit for unit in job_list if self.combat_dict[unit] == job])
@@ -320,23 +339,33 @@ class MyAgent(IDABot):
                     assigned_choke = self.siege_chokes[job[1]]
                 else:
                     assigned_choke = self.closest_chokes[job[1]]
-                if self.count_combat_job(self.combat_dict[unit]) > 4:
+                if self.count_combat_job(self.combat_dict[unit], UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 4:
                     if squared_distance(unit.position, assigned_choke) > 7:
                         unit.attack_move(assigned_choke)
                     elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SIEGETANK,self):
                         unit.morph(UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED,self))
             elif job[0] == self.DEFEND_BUNKER and unit.is_idle:
-                my_bunkers = [unit for unit in self.my_units if \
-                              unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)]
-                if len(my_bunkers) > job[1]:
-                    assigned_bunker = my_bunkers[job[1]]
+                if len(self.my_bunkers) > job[1]:
+                    assigned_bunker = self.my_bunkers[job[1]]
                     if assigned_bunker.is_completed:
                         unit.right_click(assigned_bunker)
             elif job[0] == self.STANDBY and squared_distance(unit.position, self.standby_rally_point) > 7\
                     and unit.is_idle:
                 unit.attack_move(self.standby_rally_point)
             elif job[0] == self.ATTACKING and unit.is_idle:
-                unit.attack_move(self.enemy_bases[0].depot_position)
+                if squared_distance(unit.position, self.attack_points[0]) < 20:
+                    self.attack_points.pop(0)
+                if len(self.attack_points) < 1:
+                    self.init_attack_points()
+                attack_point = self.attack_points[0]
+                unit.attack_move(attack_point)
+
+    def init_attack_points(self):
+        def squared_distance(p1: Point2D, p2: Point2D) -> float:
+            return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
+        self.attack_points = [Point2D(base.depot_position.x, base.depot_position.y) for base in self.enemy_bases]
+        start_pos = Point2D(self.get_starting_base().depot_position.x, self.get_starting_base().depot_position.y)
+        self.attack_points = sorted(self.attack_points, key=lambda attack_point: squared_distance(attack_point, start_pos))
 
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -420,8 +449,10 @@ class MyAgent(IDABot):
     CONSTRUCTING = "Constructing"
     SCOUT = "Scouting"
     def count_worker_job(self,job):
-        return len([worker for worker in self.worker_dict if self.worker_dict[worker] == job])
-
+        if isinstance(job, tuple):
+            return len([worker for worker in self.worker_dict if self.worker_dict[worker] == job])
+        else:
+            return len([worker for worker in self.worker_dict if self.worker_dict[worker][0] == job])
     def execute_worker_jobs(self):
         #TODO: fixa refinery. Fel antal workers.
         refineries = self.get_my_refineries()
@@ -750,11 +781,12 @@ class MyAgent(IDABot):
         """
         producers = self.get_my_producers(unit_type)
         amount_trained = 0
+        if not self.supply_is_sufficient(unit_type):
+            self.need_more_supply = True
+            return amount_trained
         for producer in producers:
             if not producer.is_training and producer.is_completed:
-                if not self.supply_is_sufficient(unit_type):
-                    self.need_more_supply = True
-                elif self.can_afford(unit_type) and amount_requested-amount_trained > 0:
+                if self.can_afford(unit_type) and amount_requested-amount_trained > 0:
                     producer.train(unit_type)
                     amount_trained += 1
 
@@ -777,7 +809,7 @@ class MyAgent(IDABot):
         what_builds = type_data.what_builds
 
         for unit in self.my_units:
-            if unit.unit_type in what_builds:
+            if unit.unit_type in what_builds and unit.unit_type.is_building:
                 producers.append(unit)
 
         return producers
@@ -841,7 +873,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
