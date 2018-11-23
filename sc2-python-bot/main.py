@@ -220,9 +220,16 @@ class MyAgent(IDABot):
                 self.count_refineries += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_STARPORT, self) and unit.is_completed:
                 self.count_starports += 1
-        overview_string = " Unit assignments \n ---------------- \n Miners: {} \n Gas Collectors: {} \n " \
-                          "Builders: {} \n Scouts: {} \n Choke Defenders: {} \n Bunker Defenders: {}" \
-                          " \n Standby Units: {} \n Attacking Units: {}".format(count_miners,
+        overview_string = " Unit assignments \n" \
+                          " ---------------- \n" \
+                          " Miners:           {} \n" \
+                          " Gas Collectors:   {} \n" \
+                          " Builders:         {} \n" \
+                          " Scouts:           {} \n" \
+                          " Choke Defenders:  {} \n" \
+                          " Bunker Defenders: {} \n" \
+                          " Standby Units:    {} \n" \
+                          " Attacking Units:  {}".format(count_miners,
                                                                                       count_gas_collectors,
                                                                                       count_builders,
                                                                                       count_scouts,
