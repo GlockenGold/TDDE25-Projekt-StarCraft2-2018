@@ -41,6 +41,8 @@ class MyAgent(IDABot):
                                 Point2D(60, 31), Point2D(90, 40), Point2D(124, 57), Point2D(122, 31)]
         self.scout_counter = 0
         self.enemy_bases = []
+        self.keep_attacking = False
+
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -220,7 +222,7 @@ class MyAgent(IDABot):
                 self.count_starports += 1
         overview_string = " Unit assignments \n ---------------- \n Miners: {} \n Gas Collectors: {} \n " \
                           "Builders: {} \n Scouts: {} \n Choke Defenders: {} \n Bunker Defenders: {}" \
-                          " \n Standby Units: {}, \n Attacking Units: {}".format(count_miners,
+                          " \n Standby Units: {} \n Attacking Units: {}".format(count_miners,
                                                                                       count_gas_collectors,
                                                                                       count_builders,
                                                                                       count_scouts,
@@ -285,11 +287,14 @@ class MyAgent(IDABot):
 
         start_attacking = (self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 12 and \
                            self.count_combat_job((self.STANDBY, 0), UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self)) >= 4)
+        self.keep_attacking = (self.count_combat_job(self.ATTACKING)) > 15
         if start_attacking:
             self.init_attack_points()
+        if self.keep_attacking or start_attacking:
             standby_units = [unit for unit in self.combat_dict if self.combat_dict[unit][0] == self.STANDBY]
             for unit in standby_units:
                 self.combat_dict[unit] = (self.ATTACKING, 0)
+
     DEFEND_CHOKE = "defending choke"
     DEFEND_BUNKER = "defending bunker"
     STANDBY = "standby"
@@ -366,6 +371,7 @@ class MyAgent(IDABot):
         self.attack_points = [Point2D(base.depot_position.x, base.depot_position.y) for base in self.enemy_bases]
         start_pos = Point2D(self.get_starting_base().depot_position.x, self.get_starting_base().depot_position.y)
         self.attack_points = sorted(self.attack_points, key=lambda attack_point: squared_distance(attack_point, start_pos))
+        self.attack_points.append(self.base_location_manager.get_player_starting_base_location(PLAYER_ENEMY))
 
     def set_choke_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -483,7 +489,6 @@ class MyAgent(IDABot):
             for base in base_locations:
                 build_location = self.building_placer.get_build_location_near(base.depot_position, factory_type)
                 if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
                     worker = random.choice(workers)
                     worker.build(factory_type, build_location)
                     self.worker_dict[worker] = (self.CONSTRUCTING, factory_type)
@@ -506,7 +511,6 @@ class MyAgent(IDABot):
             for base in base_locations:
                 build_location = self.building_placer.get_build_location_near(base.depot_position, engineering_bay_type)
                 if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
                     worker = random.choice(list(self.worker_dict.keys()))
                     worker.build(engineering_bay_type, build_location)
                     self.worker_dict[worker] = (self.CONSTRUCTING, engineering_bay_type)
@@ -521,7 +525,6 @@ class MyAgent(IDABot):
             for base in base_locations:
                 build_location = self.building_placer.get_build_location_near(base.depot_position, starport_type)
                 if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
                     worker = random.choice(list(self.worker_dict.keys()))
                     worker.build(starport_type, build_location)
                     self.worker_dict[worker] = (self.CONSTRUCTING, starport_type)
@@ -561,7 +564,6 @@ class MyAgent(IDABot):
                     current_choke = Point2DI(int(chokepoints[index].x), int(chokepoints[index].y))
                     build_location = self.building_placer.get_build_location_near(current_choke, bunker_type)
                     if not (build_location.x == 0 and build_location.y == 0) and self.can_afford(bunker_type):
-                        print(build_location)
                         worker = random.choice(workers)
                         worker.build(bunker_type, build_location)
                         self.worker_dict[worker] = (self.CONSTRUCTING, bunker_type)
@@ -577,7 +579,6 @@ class MyAgent(IDABot):
                     and self.count_barracks < self.count_bases + 1:
                 build_location = self.building_placer.get_build_location_near(base.depot_position, barracks_type)
                 if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
                     worker = random.choice(workers)
                     worker.build(barracks_type, build_location)
                     self.worker_dict[worker] = (self.CONSTRUCTING, barracks_type)
@@ -591,7 +592,6 @@ class MyAgent(IDABot):
         if amount_constructing == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
                 and self.count_barracks < self.count_bases + 1:
             for build_position in self.barracks_positions:
-                print(build_position)
                 worker = random.choice(workers)
                 worker.build(barracks_type, build_position)
                 self.worker_dict[worker] = (self.CONSTRUCTING, barracks_type)
@@ -618,7 +618,6 @@ class MyAgent(IDABot):
             self.need_more_supply = False
             for build_position in self.supply_depot_positions:
                 if build_position in self.supply_depot_positions:
-                    print(build_position)
                     worker = random.choice(workers)
                     worker.build(supply_depot_type, build_position)
                     self.worker_dict[worker] = (self.CONSTRUCTING, supply_depot_type)
@@ -699,13 +698,14 @@ class MyAgent(IDABot):
         command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
         number_of_bases = self.count_bases
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, command_centre_type))
-        expansion_condition = (amount_constructing == 0 and self.count_workers >=21*number_of_bases and self.count_barracks >= 1
+        expansion_condition1 = (amount_constructing == 0 and self.count_workers >=21*number_of_bases and self.count_barracks >= 1
                                and self.can_afford(command_centre_type) and number_of_bases < 3)
-        if expansion_condition:
+        if expansion_condition1:
             build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
             worker = random.choice(self.get_my_workers())
             worker.build(command_centre_type, build_location.depot_position)
             self.worker_dict[worker] = (self.CONSTRUCTING, command_centre_type)
+
 
     def add_counted_unit(self, unit):
         if unit.unit_type not in self.unit_counter:
@@ -746,14 +746,20 @@ class MyAgent(IDABot):
         self.amount_training[unit_type] = self.amount_training.get(unit_type, 0) + amount
 
     def request_marines(self):
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases) + 12)
+        if self.keep_attacking:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 299)
+        else:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases) + 12)
 
     def request_marauders(self):
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 4*len(self.my_bases))
 
     def request_tanks(self):
         #todo: bygg i fler än en factory och rätt antal.
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 2*len(self.my_bases) + 4)
+        if self.keep_attacking:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 299)
+        else:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 2*len(self.my_bases) + 4)
 
     def request_medivacs(self):
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2*len(self.my_bases))
@@ -873,7 +879,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
