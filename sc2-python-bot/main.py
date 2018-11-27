@@ -182,9 +182,11 @@ class MyAgent(IDABot):
             else:
                 old_bunkers.append(self.my_bunkers[old_index])
         for bunker_index in range(self.count_bunkers):
-            bunker = bunkers[bunker_index]
-            if bunker_index not in self.my_bunkers and bunker not in old_bunkers:
-                self.my_bunkers[bunker_index] = bunker
+            if bunker_index not in self.my_bunkers:
+                for bunker in bunkers:
+                    if bunker not in old_bunkers:
+                        self.my_bunkers[bunker_index] = bunker
+                        break
 
     def set_my_refineries(self):
         refineries = [unit for unit in self.my_units if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)]
@@ -195,9 +197,10 @@ class MyAgent(IDABot):
             else:
                 old_refineries.append(self.my_refineries[old_index])
         for refinery_index in range(self.count_refineries):
-            refinery = refineries[refinery_index]
-            if refinery_index not in self.my_refineries and refinery not in old_refineries:
-                self.my_refineries[refinery_index] = refinery
+            if refinery_index not in self.my_refineries:
+                for refinery in refineries:
+                    if refinery not in old_refineries:
+                        self.my_refineries[refinery_index] = refinery
 
     def print_unit_overview(self):
         count_miners = self.count_worker_job(self.GATHERING_MINERALS)
@@ -373,24 +376,24 @@ class MyAgent(IDABot):
         choke_north = Point2D(34, 112)
         starting_pos = self.get_starting_base().position
         if squared_distance(choke_south, starting_pos) < squared_distance(choke_north, starting_pos):
-            self.closest_chokes = [choke_south, Point2D(109, 75), Point2D(80, 54), Point2D(56, 76), Point2D(88, 77)]
+            self.closest_chokes = [choke_south, Point2D(109, 75), Point2D(80, 54), Point2D(88, 79), Point2D(63, 60)]
             self.supply_depot_positions = [Point2DI(108, 19), Point2DI(106, 21), Point2DI(104, 23), Point2DI(104, 27),
                                            Point2DI(106, 25), Point2DI(108, 23), Point2DI(110, 21), Point2DI(112, 19),
                                            Point2DI(106, 29), Point2DI(108, 27), Point2DI(110, 25), Point2DI(112, 23),
                                            Point2DI(114, 21), Point2DI(116, 19), Point2DI(104, 31), Point2DI(106, 33),
                                            Point2DI(108, 31), Point2DI(110, 29), Point2DI(112, 27), Point2DI(114, 25)]
             self.barracks_positions = [Point2DI(111, 36), Point2DI(108, 33), Point2DI(115, 33), Point2DI(111, 30)]
-            self.siege_chokes = [Point2D(113, 47), Point2D(112, 73), Point2D(84, 53), Point2D(67, 60)]
+            self.siege_chokes = [Point2D(113, 47), Point2D(112, 73), Point2D(84, 53), Point2D(88, 75), Point2D(69, 58)]
             self.standby_rally_point = Point2D(115, 43)
         else:
-            self.closest_chokes = [choke_north, Point2D(43, 92), Point2D(72, 113), Point2D(89, 104), Point2D(29, 66)]
+            self.closest_chokes = [choke_north, Point2D(43, 92), Point2D(72, 113), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
                                            Point2DI(41, 147), Point2DI(43, 145), Point2DI(45, 143), Point2DI(47, 141),
                                            Point2DI(37, 147), Point2DI(39, 145), Point2DI(41, 143), Point2DI(43, 141),
                                            Point2DI(45, 139), Point2DI(47, 137), Point2DI(34, 147), Point2DI(36, 145),
                                            Point2DI(37, 143), Point2DI(40, 141), Point2DI(42, 139), Point2DI(44, 137)]
             self.barracks_positions = [Point2DI(42, 134), Point2DI(39, 131), Point2DI(38, 137), Point2DI(35, 134)]
-            self.siege_chokes = [Point2D(39, 120), Point2D(41, 96), Point2D(66, 117), Point2D(86, 74)]
+            self.siege_chokes = [Point2D(39, 120), Point2D(41, 96), Point2D(66, 117), Point2D(64, 91), Point2D(88, 110)]
             self.standby_rally_point = Point2D(35, 125)
             self.scouting_points.reverse()
 
@@ -416,10 +419,10 @@ class MyAgent(IDABot):
                 worker.stop()
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
         base_locations = self.my_bases
-        needed_gas_collectors = []
+        needed_gas_collectors = {}
         for refinery_index in self.my_refineries:
             job = (self.COLLECTING_GAS, refinery_index)
-            needed_gas_collectors.append(3 - self.count_worker_job(job))
+            needed_gas_collectors[refinery_index] = (3 - self.count_worker_job(job))
         needed_miners = []
         for base_number, base in enumerate(base_locations):
             minerals = self.my_minerals[base_number]
@@ -435,11 +438,11 @@ class MyAgent(IDABot):
                     elif self.count_worker_job((self.SCOUT, 0)) < 1:
                         self.worker_dict[worker] = (self.SCOUT, 0)
                         break
-                    elif base_number * 2 < len(needed_gas_collectors) and needed_gas_collectors[base_number * 2] > 0 :
+                    elif needed_gas_collectors.get(base_number * 2) is not None and needed_gas_collectors[base_number * 2] > 0 :
                         self.worker_dict[worker] = (self.COLLECTING_GAS, base_number*2)
                         needed_gas_collectors[base_number * 2] -= 1
                         break
-                    elif base_number * 2 + 1 < len(needed_gas_collectors) and needed_gas_collectors[base_number*2 +1] > 0:
+                    elif needed_gas_collectors.get(base_number * 2 + 1) is not None and needed_gas_collectors[base_number*2 +1] > 0:
                         self.worker_dict[worker] = (self.COLLECTING_GAS, base_number * 2 + 1)
                         needed_gas_collectors[base_number * 2 + 1] -= 1
                         break
@@ -464,7 +467,7 @@ class MyAgent(IDABot):
                 job_index = worker_dict[worker][1]
                 if job == self.GATHERING_MINERALS:
                     worker.right_click(random.choice(self.my_minerals[job_index]))
-                elif job == self.COLLECTING_GAS and job_index <= len(self.my_refineries):
+                elif job == self.COLLECTING_GAS and self.my_refineries.get(job_index) is not None:
                     worker.right_click(refineries[job_index])
                 elif job == self.SCOUT:
                     worker.move(self.scouting_points[self.scout_counter])
@@ -699,9 +702,13 @@ class MyAgent(IDABot):
         for index, base in enumerate(self.my_bases):
             if len(self.my_minerals[index]) >= 4:
                 bases_with_minerals.append(base)
-        expansion_condition1 = (amount_constructing == 0 and self.sought_unit_counts[worker_type] <= self.count_workers +5 and self.count_barracks >= 1
-                               and self.can_afford(command_centre_type) and len(bases_with_minerals) < 3)
-        if expansion_condition1:
+        expansion_condition = (amount_constructing == 0 and
+                               self.sought_unit_counts[worker_type] <= self.count_workers +5 and
+                               self.count_barracks >= 1 and
+                               self.can_afford(command_centre_type) and
+                               len(bases_with_minerals) < 3 and
+                               self.count_refineries >= 2 * self.count_bases)
+        if expansion_condition:
             build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
             worker = random.choice(self.get_my_workers())
             worker.build(command_centre_type, build_location.depot_position)
@@ -900,13 +907,13 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
     participant_1 = create_participants(Race.Terran, bot1)
     # participant_2 = create_participants(Race.Terran, bot2)
-    participant_2 = create_computer(Race.Random, Difficulty.Medium)
+    participant_2 = create_computer(Race.Random, Difficulty.Hard)
 
     #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
