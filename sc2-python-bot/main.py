@@ -25,6 +25,7 @@ class MyAgent(IDABot):
         self.count_factories = 0
         self.count_engineering_bays = 0
         self.count_starports = 0
+        self.count_armouries = 0
         self.my_units = []
         self.my_bases = []
         self.my_bunkers = {}
@@ -39,6 +40,11 @@ class MyAgent(IDABot):
                                 Point2D(61, 94), Point2D(85, 112), Point2D(91, 137), Point2D(124, 135),
                                 Point2D(123, 86), Point2D(89, 72), Point2D(66, 55), Point2D(28, 32),
                                 Point2D(60, 31), Point2D(90, 40), Point2D(124, 57), Point2D(122, 31)]
+        self.fusion_core_position = Point2DI(128, 20)
+        self.engineering_bay_position = Point2DI(136, 29)
+        self.factory_positions = [Point2DI(130, 42), Point2DI(133, 39)]
+        self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
+        self.armoury_position = Point2DI(33, 33)
         self.scout_counter = 0
         self.enemy_bases = []
 
@@ -63,24 +69,28 @@ class MyAgent(IDABot):
         self.print_unit_overview()
         self.set_my_bunkers()
         if self.game_ticker % 2 == 0:
+            self.research_damage_upgrade()
             self.train_requests()
         if self.game_ticker % 5 == 0:
             self.build_refineries()
             self.build_depots()
+            self.research_armour_upgrade()
             self.build_barracks()
             self.build_expansion()
             self.build_bunkers()
             self.build_factory()
             self.build_factory_tech_lab()
             self.build_barracks_tech_lab()
-            #self.build_engineering_bay()
-            #self.build_starport()
-            #self.build_starport_tech_lab()
+            self.build_engineering_bay()
+            self.build_starport()
+            self.build_starport_tech_lab()
+            self.build_fusion_core()
             self.request_workers()
             self.request_marines()
             self.request_tanks()
             self.request_marauders()
-            #self.request_medivacs()
+            self.request_medivacs()
+            self.request_battlecruisers()
         self.execute_worker_jobs()
         self.game_ticker += 1
 
@@ -90,9 +100,6 @@ class MyAgent(IDABot):
     # Bunker 1 north: (34,112)
     # Ramp Expo South (116, 54)
     # Ramp Expo North (34, 114)
-
-    # Fusion Core South: (128, 20)
-    # Fusion Core North: (22, 147)
 
     # Expo 1 choke south: (107, 67)
     # Expo 2 choke north: (66, 117)
@@ -149,6 +156,12 @@ class MyAgent(IDABot):
 
     def print_debug(self):
         my_workers = list(self.worker_dict.keys())
+        for index, unit in enumerate(self.my_units):
+            if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_FACTORY, self) or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_STARPORT, self) \
+                    or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_MISSILETURRET, self) or \
+                    unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ARMORY, self):
+                debug_string = "<{}>".format(unit.position)
+                self.map_tools.draw_text(unit.position, debug_string, Color.TEAL)
         for index, unit in enumerate(my_workers):
             if unit.unit_type.is_worker:
                 job = self.worker_dict[unit][0]
@@ -220,7 +233,7 @@ class MyAgent(IDABot):
                 self.count_starports += 1
         overview_string = " Unit assignments \n ---------------- \n Miners: {} \n Gas Collectors: {} \n " \
                           "Builders: {} \n Scouts: {} \n Choke Defenders: {} \n Bunker Defenders: {}" \
-                          " \n Standby Units: {}, \n Attacking Units: {}".format(count_miners,
+                          " \n Standby Units: {} \n Attacking Units: {}".format(count_miners,
                                                                                       count_gas_collectors,
                                                                                       count_builders,
                                                                                       count_scouts,
@@ -252,8 +265,6 @@ class MyAgent(IDABot):
                 for base in base_locations:
                     if base.contains_position(command_center.position) and base not in self.my_bases:
                         self.my_bases.append(base)
-
-
 
     def get_starting_base(self):
         return self.base_location_manager.get_player_starting_base_location(PLAYER_SELF)
@@ -380,9 +391,13 @@ class MyAgent(IDABot):
                                            Point2DI(106, 29), Point2DI(108, 27), Point2DI(110, 25), Point2DI(112, 23),
                                            Point2DI(114, 21), Point2DI(116, 19), Point2DI(104, 31), Point2DI(106, 33),
                                            Point2DI(108, 31), Point2DI(110, 29), Point2DI(112, 27), Point2DI(114, 25)]
-            self.barracks_positions = [Point2DI(111, 36), Point2DI(108, 33), Point2DI(115, 33), Point2DI(111, 30)]
+            self.barracks_positions = [Point2DI(112, 37), Point2DI(109, 34), Point2DI(116, 34), Point2DI(112, 31)]
             self.siege_chokes = [Point2D(113, 47), Point2D(112, 73), Point2D(84, 53), Point2D(67, 60)]
             self.standby_rally_point = Point2D(115, 43)
+            self.fusion_core_position = Point2DI(128, 20)
+            self.engineering_bay_position = Point2DI(136, 29)
+            self.factory_positions = [Point2DI(130, 42), Point2DI(133, 39)]
+            self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
         else:
             self.closest_chokes = [choke_north, Point2D(43, 92), Point2D(72, 113), Point2D(89, 104), Point2D(29, 66)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
@@ -390,13 +405,22 @@ class MyAgent(IDABot):
                                            Point2DI(37, 147), Point2DI(39, 145), Point2DI(41, 143), Point2DI(43, 141),
                                            Point2DI(45, 139), Point2DI(47, 137), Point2DI(34, 147), Point2DI(36, 145),
                                            Point2DI(37, 143), Point2DI(40, 141), Point2DI(42, 139), Point2DI(44, 137)]
-            self.barracks_positions = [Point2DI(42, 134), Point2DI(39, 131), Point2DI(38, 137), Point2DI(35, 134)]
+            self.barracks_positions = [Point2DI(41, 133), Point2DI(37, 130), Point2DI(37, 136), Point2DI(34, 133)]
             self.siege_chokes = [Point2D(39, 120), Point2D(41, 96), Point2D(66, 117), Point2D(85, 107)]
             self.standby_rally_point = Point2D(35, 125)
+            self.fusion_core_position = Point2DI(22, 147)
+            self.engineering_bay_position = Point2DI(16, 140)
+            self.factory_positions = [Point2DI(21, 124), Point2DI(17, 129)]
+            self.starport_positions = [Point2DI(28, 132), Point2DI(23, 132)]
+            self.armoury_position = Point2DI(32, 139)
             self.scouting_points.reverse()
 
-            # Barracks positions North = [Point2DI(42.50, 134.50), Point2DI(39.50, 131.50),
-    # Point2DI(38.50, 137.50), Point2DI(35.50, 134.50)]
+    # TODO: skriv build_factory, build_engineering_bay och build_starport med hårdkodade koordinater
+
+    # Starport position South = [Point2DI(123, 36), Point2DI(128, 36)]
+    # Starport position North = [Point2DI(28, 132), Point2DI(23, 132)]
+
+    # Missile turret positions north = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125)]
 
     # Barracks position South = [Point2DI(111.50, 36.50), Point2DI(108.50, 33.50),
     # Point2DI(115.50, 33.50), Point2DI(111.50, 30.50)]
@@ -448,11 +472,13 @@ class MyAgent(IDABot):
     COLLECTING_GAS = "Collecting gas"
     CONSTRUCTING = "Constructing"
     SCOUT = "Scouting"
+
     def count_worker_job(self,job):
         if isinstance(job, tuple):
             return len([worker for worker in self.worker_dict if self.worker_dict[worker] == job])
         else:
             return len([worker for worker in self.worker_dict if self.worker_dict[worker][0] == job])
+
     def execute_worker_jobs(self):
         #TODO: fixa refinery. Fel antal workers.
         refineries = self.get_my_refineries()
@@ -474,20 +500,24 @@ class MyAgent(IDABot):
                     self.worker_dict.pop(worker)
 
     def build_factory(self):
-        base_locations = self.my_bases
-        workers = list(self.worker_dict.keys())
+        workers = self.get_my_workers()
         factory_type = UnitType(UNIT_TYPEID.TERRAN_FACTORY, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, factory_type))
+        if len(self.factory_positions) == 0 and self.count_factories < 2:
+            self.set_choke_points()
         if amount_constructing == 0 and self.count_factories < self.count_bases and self.can_afford(factory_type)\
                 and self.count_barracks >= self.count_bases and self.count_factories < 2:
-            for base in base_locations:
-                build_location = self.building_placer.get_build_location_near(base.depot_position, factory_type)
-                if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
+            for build_position in self.factory_positions:
+                if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, factory_type):
+                    print(build_position)
                     worker = random.choice(workers)
-                    worker.build(factory_type, build_location)
+                    worker.build(factory_type, build_position)
+                    # self.factory_positions.remove(build_position)
                     self.worker_dict[worker] = (self.CONSTRUCTING, factory_type)
                     break
+                else:
+                    print("can't build at: ", build_position)
+                    self.factory_positions.remove(build_position)
 
     def build_factory_tech_lab(self):
         factory_type = UnitType(UNIT_TYPEID.TERRAN_FACTORY, self)
@@ -498,34 +528,40 @@ class MyAgent(IDABot):
                     self.build_upgrade(unit, factory_tech_lab_type)
 
     def build_engineering_bay(self):
+        workers = self.get_my_workers()
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, engineering_bay_type))
+        if not self.engineering_bay_position and self.count_engineering_bays < 1:
+            self.set_choke_points()
         if amount_constructing == 0 and self.can_afford(engineering_bay_type) and self.count_engineering_bays < 1 \
                 and self.count_barracks >= 2:
-            base_locations = self.my_bases
-            for base in base_locations:
-                build_location = self.building_placer.get_build_location_near(base.depot_position, engineering_bay_type)
-                if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
-                    worker = random.choice(list(self.worker_dict.keys()))
-                    worker.build(engineering_bay_type, build_location)
-                    self.worker_dict[worker] = (self.CONSTRUCTING, engineering_bay_type)
-                    break
+            build_position = self.engineering_bay_position
+            worker = random.choice(workers)
+            worker.build(engineering_bay_type, build_position)
+            self.worker_dict[worker] = (self.CONSTRUCTING, engineering_bay_type)
+
+    def build_missile_turrets(self):
+        pass
 
     def build_starport(self):
+        workers = self.get_my_workers()
         starport_type = UnitType(UNIT_TYPEID.TERRAN_STARPORT, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, starport_type))
+        if len(self.starport_positions) == 0:
+            self.set_choke_points()
         if self.count_factories > 1 and self.can_afford(starport_type) and amount_constructing == 0 \
-                and self.count_starports < 1:
-            base_locations = self.my_bases
-            for base in base_locations:
-                build_location = self.building_placer.get_build_location_near(base.depot_position, starport_type)
-                if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
-                    worker = random.choice(list(self.worker_dict.keys()))
-                    worker.build(starport_type, build_location)
+                and self.count_starports < 2:
+            for build_position in self.starport_positions:
+                if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, starport_type):
+                    print(build_position)
+                    worker = random.choice(workers)
+                    worker.build(starport_type, build_position)
                     self.worker_dict[worker] = (self.CONSTRUCTING, starport_type)
+                    # self.starport_positions.remove(build_position)
                     break
+                else:
+                    print("can't build at: ", build_position)
+                    self.starport_positions.remove(build_position)
 
     def build_starport_tech_lab(self):
         starport_type = UnitType(UNIT_TYPEID.TERRAN_STARPORT, self)
@@ -535,10 +571,17 @@ class MyAgent(IDABot):
                 if unit.unit_type == starport_type and unit.is_completed and self.can_afford(starport_tech_lab_type):
                     self.build_upgrade(unit, starport_tech_lab_type)
 
+    def build_fusion_core(self):
+        fusion_core_type = UnitType(UNIT_TYPEID.TERRAN_FUSIONCORE, self)
+        amount_constructing = self.count_worker_job((self.CONSTRUCTING, fusion_core_type))
+        if amount_constructing == 0 and self.can_afford(fusion_core_type) and self.count_starports >= 1:
+            worker = random.choice(list(self.worker_dict.keys()))
+            worker.build(fusion_core_type, self.fusion_core_position)
+            self.worker_dict[worker] = (self.CONSTRUCTING, fusion_core_type)
+
     def build_upgrade(self, building, upgrade):  # Unit, UnitType
         if building.is_completed and self.can_afford(upgrade):
             building.train(upgrade)
-
 
     def build_bunkers(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -567,36 +610,25 @@ class MyAgent(IDABot):
                         self.worker_dict[worker] = (self.CONSTRUCTING, bunker_type)
                         break
 
-    def build_barracks_old(self):
-        workers = self.get_my_workers()
-        barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
-        base_location = self.my_bases
-        for base in base_location:
-            amount_constructing = self.count_worker_job((self.CONSTRUCTING, barracks_type))
-            if amount_constructing == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
-                    and self.count_barracks < self.count_bases + 1:
-                build_location = self.building_placer.get_build_location_near(base.depot_position, barracks_type)
-                if not (build_location.x == 0 and build_location.y == 0):
-                    print(build_location)
-                    worker = random.choice(workers)
-                    worker.build(barracks_type, build_location)
-                    self.worker_dict[worker] = (self.CONSTRUCTING, barracks_type)
-
     def build_barracks(self):
         workers = self.get_my_workers()
         barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, barracks_type))
-        if len(self.barracks_positions) == 0:
+        if len(self.barracks_positions) == 0 and self.count_barracks < 4:
             self.set_choke_points()
         if amount_constructing == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
-                and self.count_barracks < self.count_bases + 1:
+                and self.count_barracks < 4 and self.count_barracks < self.count_bases + 1:
             for build_position in self.barracks_positions:
-                print(build_position)
-                worker = random.choice(workers)
-                worker.build(barracks_type, build_position)
-                self.worker_dict[worker] = (self.CONSTRUCTING, barracks_type)
-                self.barracks_positions.remove(build_position)
-                break
+                if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, barracks_type):
+                    print(build_position)
+                    worker = random.choice(workers)
+                    worker.build(barracks_type, build_position)
+                    # self.barracks_positions.remove(build_position)
+                    self.worker_dict[worker] = (self.CONSTRUCTING, barracks_type)
+                    break
+                else:
+                    print("can't build at: ", build_position)
+                    self.barracks_positions.remove(build_position)
 
     def build_barracks_tech_lab(self):
         barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
@@ -606,6 +638,19 @@ class MyAgent(IDABot):
                 if unit.unit_type == barracks_type and unit.is_completed and self.can_afford(barracks_tech_lab_type):
                     self.build_upgrade(unit, barracks_tech_lab_type)
 
+    def build_armoury(self):
+        workers = self.get_my_workers()
+        armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
+        amount_constructing = self.count_worker_job((self.CONSTRUCTING, armoury_type))
+        if amount_constructing == 0 and self.can_afford(armoury_type) and self.max_supply >= 23 \
+                and self.count_engineering_bays >= 1:
+            build_position = self.armoury_position
+            if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, armoury_type):
+                print(build_position)
+                worker = random.choice(workers)
+                worker.build(armoury_type, build_position)
+                self.worker_dict[worker] = (self.CONSTRUCTING, armoury_type)
+
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
         workers = self.get_my_workers()
@@ -614,10 +659,10 @@ class MyAgent(IDABot):
         if len(self.supply_depot_positions) == 0:
             self.set_choke_points()
         if (self.current_supply >= self.max_supply - 3 or self.need_more_supply) and self.max_supply < 200 \
-                and amount_constructing <= 1 and self.can_afford(supply_depot_type):
+                and amount_constructing <= self.count_bases - 1 and self.can_afford(supply_depot_type):
             self.need_more_supply = False
             for build_position in self.supply_depot_positions:
-                if build_position in self.supply_depot_positions:
+                if build_position in self.supply_depot_positions and self.map_tools.can_build_type_at_position(build_position.x, build_position.y, supply_depot_type):
                     print(build_position)
                     worker = random.choice(workers)
                     worker.build(supply_depot_type, build_position)
@@ -656,44 +701,86 @@ class MyAgent(IDABot):
         barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
         if not self.CONCUSSIVE_SHELLS_RESEARCHED:
             self.research_upgrade(barracks_tech_lab_type, concussive_shells_type)
-    
-    ARMOUR_UPGRADE = 0
-    DAMAGE_UPGRADE = 0
+    """
+
+    ARMOUR_UPGRADE1 = False
+    ARMOUR_UPGRADE2 = False
+    ARMOUR_UPGRADE3 = False
+    DAMAGE_UPGRADE1 = False
+    DAMAGE_UPGRADE2 = False
+    DAMAGE_UPGRADE3 = False
 
     def research_damage_upgrade(self):
         # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
-        print(self.DAMAGE_UPGRADE)
         damage_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL1)
         damage_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL2)
         damage_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL3)
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
-            if unit.unit_type == engineering_bay_type:
-                if self.minerals == 100 and self.gas == 100:
+            if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
+                if self.can_afford_upgrade("W1") and not self.DAMAGE_UPGRADE1:
+                    print("Damage Upgrade 1: ", self.DAMAGE_UPGRADE1)
                     self.research_upgrade(engineering_bay_type, damage_upgrade_type1)
-                    self.DAMAGE_UPGRADE += 1
+                    self.DAMAGE_UPGRADE1 = True
+                    break
+                elif self.can_afford_upgrade("W2") and self.count_armouries >= 1 and not self.DAMAGE_UPGRADE2:
+                    print("Damage Upgrade 2: ", self.DAMAGE_UPGRADE2)
+                    self.research_upgrade(engineering_bay_type, damage_upgrade_type2)
+                    self.DAMAGE_UPGRADE2 = True
+                    break
+                elif self.can_afford_upgrade("W3") and self.count_armouries >= 1 and not self.DAMAGE_UPGRADE3:
+                    print("Damage Upgrade 3: ", self.DAMAGE_UPGRADE3)
+                    self.research_upgrade(engineering_bay_type, damage_upgrade_type3)
+                    self.DAMAGE_UPGRADE3 = True
                     break
 
     def research_armour_upgrade(self):
         # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
-        print(self.ARMOUR_UPGRADE)
         armour_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL1)
         armour_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL2)
         armour_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL3)
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
-            if unit.unit_type == engineering_bay_type and unit.is_completed:
-                if self.minerals == 100 and self.gas == 100:
+            if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
+                if self.can_afford_upgrade("A1") and not self.ARMOUR_UPGRADE1:
+                    print("Armour Upgrade 1: ", self.ARMOUR_UPGRADE1)
                     self.research_upgrade(engineering_bay_type, armour_upgrade_type1)
-                    self.ARMOUR_UPGRADE += 1
+                    self.ARMOUR_UPGRADE1 = True
                     break
-    """
+                elif self.can_afford_upgrade("A2") and self.count_armouries >= 1 and not self.ARMOUR_UPGRADE2:
+                    print("Armour Upgrade 2: ", self.ARMOUR_UPGRADE2)
+                    self.research_upgrade(engineering_bay_type, armour_upgrade_type2)
+                    self.ARMOUR_UPGRADE2 = True
+                    break
+                elif self.can_afford_upgrade("A3") and self.count_armouries >= 1 and not self.ARMOUR_UPGRADE3:
+                    print("Armour Upgrade 3: ", self.ARMOUR_UPGRADE3)
+                    self.research_upgrade(engineering_bay_type, armour_upgrade_type3)
+                    self.ARMOUR_UPGRADE3 = True
+                    break
+
+    def can_afford_upgrade(self, upgrade_number):
+        if upgrade_number == "A1":
+            return self.minerals >= 100 and self.gas >= 100
+        elif upgrade_number == "A2":
+            return self.minerals >= 175 and self.gas >= 175
+        elif upgrade_number == "A3":
+            return self.minerals >= 200 and self.gas >= 200
+        elif upgrade_number == "W1":
+            return self.minerals >= 100 and self.gas >= 100
+        elif upgrade_number == "W2":
+            return self.minerals >= 175 and self.gas >= 175
+        elif upgrade_number == "W3":
+            return self.minerals >= 200 and self.gas >= 200
+
     def research_upgrade(self, building, upgrade_type):
         my_units = self.my_units
         for unit in my_units:
-            if unit.unit_type == building and unit.is_completed and unit.is_idle \
-                    and isinstance(upgrade_type, UpgradeID):
+            if unit.unit_type == building and unit.is_completed and unit.is_idle:
+                print("Research Upgrade")
                 unit.research(upgrade_type)
+            #elif unit.unit_type == building and unit.is_completed and unit.is_idle and \
+            #        isinstance(upgrade_type, AbilityID):
+            #    pass
 
     def build_expansion(self):
         command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
@@ -757,6 +844,9 @@ class MyAgent(IDABot):
 
     def request_medivacs(self):
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2*len(self.my_bases))
+
+    def request_battlecruisers(self):
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 6)
 
     def request_workers(self):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
@@ -873,7 +963,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
