@@ -83,7 +83,7 @@ class MyAgent(IDABot):
             self.build_refineries()
             self.build_depots()
             self.research_armour_upgrade()
-            self.research_air_armour_upgrade()
+            self.research_vehicle_armour_upgrade()
             self.build_barracks()
             self.build_bunkers()
             self.build_factory()
@@ -794,24 +794,24 @@ class MyAgent(IDABot):
                     self.ARMOUR_UPGRADE3 = True
                     break
 
-    def research_air_armour_upgrade(self):
+    def research_vehicle_armour_upgrade(self):
         # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
-        air_armour_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL1)
-        air_armour_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL2)
-        air_armour_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL3)
+        vehicle_armour_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL1)
+        vehicle_armour_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL2)
+        vehicle_armour_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL3)
         armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
         for unit in self.my_units:
             if unit.unit_type == armoury_type and unit.is_completed and unit.is_idle:
                 if self.can_afford_upgrade("AA1") and not self.VEHICLE_ARMOUR_UPGRADE1:
-                    self.research_upgrade(armoury_type, air_armour_upgrade_type1)
+                    self.research_upgrade(armoury_type, vehicle_armour_upgrade_type1)
                     self.VEHICLE_ARMOUR_UPGRADE1 = True
                     break
                 elif self.can_afford_upgrade("AA2") and self.count_armouries >= 1 and not self.VEHICLE_ARMOUR_UPGRADE2:
-                    self.research_upgrade(armoury_type, air_armour_upgrade_type2)
+                    self.research_upgrade(armoury_type, vehicle_armour_upgrade_type2)
                     self.VEHICLE_ARMOUR_UPGRADE2 = True
                     break
                 elif self.can_afford_upgrade("AA3") and self.count_armouries >= 1 and not self.VEHICLE_ARMOUR_UPGRADE3:
-                    self.research_upgrade(armoury_type, air_armour_upgrade_type3)
+                    self.research_upgrade(armoury_type, vehicle_armour_upgrade_type3)
                     self.VEHICLE_ARMOUR_UPGRADE3 = True
                     break
 
