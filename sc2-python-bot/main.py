@@ -380,6 +380,7 @@ class MyAgent(IDABot):
                     attack_point = self.attack_points[0]
                     unit.attack_move(attack_point)
 
+# B)
     def init_attack_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
