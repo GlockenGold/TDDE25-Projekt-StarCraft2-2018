@@ -17,7 +17,8 @@ class MyAgent(IDABot):
         self.combat_dict = {}
         self.count_bases = 0
         self.count_workers = 0
-        self.count_barracks = 0
+        self.count_completed_barracks = 0
+        self.count_all_barracks = 0
         self.count_bunkers = 0
         self.count_combat_units = 0
         self.count_refineries = 0
@@ -181,6 +182,9 @@ class MyAgent(IDABot):
                 elif job == self.SCOUT:
                     debug_string = "<{} {}>".format(job, str(self.worker_dict[unit][1]))
                     self.map_tools.draw_text(unit.position, debug_string, Color.PURPLE)
+                elif job == self.REPAIR:
+                    debug_string = "<{} {}>".format(job, str(self.worker_dict[unit][1]))
+                    self.map_tools.draw_text(unit.position, debug_string, Color.WHITE)
         for combat_unit in self.combat_dict:
             job = self.combat_dict[combat_unit]
             debug_string = "<{} {}>".format(job[0], job[1])
@@ -346,30 +350,34 @@ class MyAgent(IDABot):
 
         for unit in self.combat_dict:
             job = self.combat_dict[unit]
-            if job[0] == self.DEFEND_CHOKE and unit.is_idle:
-                if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self):
-                    assigned_choke = self.siege_chokes[job[1]]
-                else:
-                    assigned_choke = self.closest_chokes[job[1]]
-                if self.count_combat_job(self.combat_dict[unit], UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 4:
-                    if squared_distance(unit.position, assigned_choke) > 7:
-                        unit.attack_move(assigned_choke)
-                    elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SIEGETANK,self):
-                        unit.morph(UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED,self))
-            elif job[0] == self.DEFEND_BUNKER and unit.is_idle:
-                assigned_bunker = self.my_bunkers.get(job[1])
-                if not assigned_bunker == None and assigned_bunker.is_completed:
-                    unit.right_click(assigned_bunker)
-            elif job[0] == self.STANDBY and squared_distance(unit.position, self.standby_rally_point) > 7\
-                    and unit.is_idle:
-                unit.attack_move(self.standby_rally_point)
-            elif job[0] == self.ATTACKING and unit.is_idle:
-                if squared_distance(unit.position, self.attack_points[0]) < 20:
-                    self.attack_points.pop(0)
-                if len(self.attack_points) < 1:
-                    self.init_attack_points()
-                attack_point = self.attack_points[0]
-                unit.attack_move(attack_point)
+            if unit.is_idle:
+                if job[0] == self.DEFEND_CHOKE:
+                    if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self):
+                        assigned_choke = self.siege_chokes[job[1]]
+                    else:
+                        assigned_choke = self.closest_chokes[job[1]]
+                    if self.count_combat_job(self.combat_dict[unit], UnitType(UNIT_TYPEID.TERRAN_MARINE, self)) >= 4:
+                        if squared_distance(unit.position, assigned_choke) > 7:
+                            unit.attack_move(assigned_choke)
+                        elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_SIEGETANK,self):
+                            unit.morph(UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED,self))
+                elif job[0] == self.DEFEND_BUNKER:
+                    assigned_bunker = self.my_bunkers.get(job[1])
+                    if not assigned_bunker == None and assigned_bunker.is_completed:
+                        unit.right_click(assigned_bunker)
+                elif job[0] == self.STANDBY and unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self):
+                    damaged_units = [unit for unit in self.my_units if not unit.unit_type.is_building and unit.hit_points < 45]
+                    if len(damaged_units) > 0:
+                        unit.move(damaged_units[0].position)
+                elif job[0] == self.STANDBY and squared_distance(unit.position, self.standby_rally_point) > 7:
+                    unit.attack_move(self.standby_rally_point)
+                elif job[0] == self.ATTACKING:
+                    if squared_distance(unit.position, self.attack_points[0]) < 20:
+                        self.attack_points.pop(0)
+                    if len(self.attack_points) < 1:
+                        self.init_attack_points()
+                    attack_point = self.attack_points[0]
+                    unit.attack_move(attack_point)
 
     def init_attack_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -418,12 +426,8 @@ class MyAgent(IDABot):
             self.armoury_position = Point2DI(32, 139)
             self.scouting_points.reverse()
 
-    # TODO: skriv build_factory, build_engineering_bay och build_starport med hårdkodade koordinater
-
-    # Starport position South = [Point2DI(123, 36), Point2DI(128, 36)]
-    # Starport position North = [Point2DI(28, 132), Point2DI(23, 132)]
-
-    # Missile turret positions north = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125)]
+            # Barracks positions North = [Point2DI(42.50, 134.50), Point2DI(39.50, 131.50),
+    # Point2DI(38.50, 137.50), Point2DI(35.50, 134.50)]
 
     # Barracks position South = [Point2DI(111.50, 36.50), Point2DI(108.50, 33.50),
     # Point2DI(115.50, 33.50), Point2DI(111.50, 30.50)]
@@ -442,6 +446,8 @@ class MyAgent(IDABot):
                 self.worker_dict.pop(worker)
             if worker_not_needed:
                 worker.stop()
+        damaged_buildings = [unit for unit in self.my_units if unit.unit_type.is_building and unit.is_completed and
+                             unit.hit_points < 400]
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
         base_locations = self.my_bases
         needed_gas_collectors = {}
@@ -471,12 +477,15 @@ class MyAgent(IDABot):
                         self.worker_dict[worker] = (self.COLLECTING_GAS, base_number * 2 + 1)
                         needed_gas_collectors[base_number * 2 + 1] -= 1
                         break
-
+                    elif len(damaged_buildings)> 0 and self.count_worker_job(self.REPAIR) == 0:
+                        self.worker_dict[worker] = (self.REPAIR, damaged_buildings[0])
+                        break
 
     GATHERING_MINERALS = "Miner"
     COLLECTING_GAS = "Collecting gas"
     CONSTRUCTING = "Constructing"
     SCOUT = "Scouting"
+    REPAIR = "Repairing"
 
     def count_worker_job(self,job):
         if isinstance(job, tuple):
@@ -500,6 +509,9 @@ class MyAgent(IDABot):
                     self.scout_counter += 1
                     if self.scout_counter >= 16:
                         self.scout_counter = 0
+                elif job == self.REPAIR and job_index.is_alive and job_index.hit_points < 400:
+                    worker.right_click(job_index)
+                    break
                 else:
                     self.worker_dict.pop(worker)
 
@@ -510,7 +522,7 @@ class MyAgent(IDABot):
         if len(self.factory_positions) == 0 and self.count_factories < 2:
             self.set_choke_points()
         if amount_constructing == 0 and self.count_factories < self.count_bases and self.can_afford(factory_type)\
-                and self.count_barracks >= self.count_bases and self.count_factories < 2:
+                and self.count_completed_barracks >= self.count_bases and self.count_factories < 2:
             for build_position in self.factory_positions:
                 if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, factory_type):
                     print(build_position)
@@ -538,7 +550,7 @@ class MyAgent(IDABot):
         if not self.engineering_bay_position and self.count_engineering_bays < 1:
             self.set_choke_points()
         if amount_constructing == 0 and self.can_afford(engineering_bay_type) and self.count_engineering_bays < 1 \
-                and self.count_barracks >= 2:
+                and self.count_completed_barracks >= 2:
             build_position = self.engineering_bay_position
             worker = random.choice(workers)
             worker.build(engineering_bay_type, build_position)
@@ -554,7 +566,7 @@ class MyAgent(IDABot):
         if len(self.starport_positions) == 0:
             self.set_choke_points()
         if self.count_factories > 1 and self.can_afford(starport_type) and amount_constructing == 0 \
-                and self.count_starports < 2:
+                and self.count_starports < 2 and self.count_bases > 1:
             for build_position in self.starport_positions:
                 if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, starport_type):
                     print(build_position)
@@ -596,7 +608,7 @@ class MyAgent(IDABot):
         bunker_type = UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, bunker_type))
         if self.count_bunkers < self.count_bases and self.can_afford(bunker_type) \
-                and self.count_barracks >= self.count_bases and self.count_bunkers <= len(chokepoints) \
+                and self.count_completed_barracks >= self.count_bases and self.count_bunkers <= len(chokepoints) \
                 and amount_constructing == 0:
             bunkers = [unit for unit in self.my_units if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BUNKER, self)]
             for index in range(len(base_locations)):
@@ -617,10 +629,10 @@ class MyAgent(IDABot):
         workers = self.get_my_workers()
         barracks_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self)
         amount_constructing = self.count_worker_job((self.CONSTRUCTING, barracks_type))
-        if len(self.barracks_positions) == 0 and self.count_barracks < 4:
+        if len(self.barracks_positions) == 0 and self.count_completed_barracks < 4:
             self.set_choke_points()
         if amount_constructing == 0 and self.can_afford(barracks_type) and self.max_supply >= 23 \
-                and self.count_barracks < 4 and self.count_barracks < self.count_bases + 1:
+                and self.count_all_barracks < self.count_bases + 1:
             for build_position in self.barracks_positions:
                 if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, barracks_type):
                     print(build_position)
@@ -796,8 +808,8 @@ class MyAgent(IDABot):
             if len(self.my_minerals[index]) >= 4:
                 bases_with_minerals.append(base)
         expansion_condition = (amount_constructing == 0 and
-                               self.sought_unit_counts[worker_type] <= self.count_workers +5 and
-                               self.count_barracks >= 1 and
+                               self.sought_unit_counts[worker_type] <= self.count_workers + 5 and
+                               self.count_completed_barracks >= 1 and
                                self.can_afford(command_centre_type) and
                                len(bases_with_minerals) < 3 and
                                self.count_refineries >= 2 * self.count_bases)
@@ -817,7 +829,8 @@ class MyAgent(IDABot):
     def count_things(self):
         self.count_bases = len(self.my_bases)
         self.count_workers = 0
-        self.count_barracks = 0
+        self.count_all_barracks = 0
+        self.count_completed_barracks = 0
         self.count_combat_units = 0
         self.count_depots = 0
         self.count_factories = 0
@@ -832,8 +845,10 @@ class MyAgent(IDABot):
                 self.count_workers += 1
             elif unit.unit_type.is_supply_provider:
                 self.count_depots += 1
-            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self) and unit.is_completed:
-                self.count_barracks += 1
+            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_BARRACKS, self):
+                self.count_all_barracks += 1
+                if unit.is_completed:
+                    self.count_completed_barracks += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_FACTORY, self) and unit.is_completed:
                 self.count_factories += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self) and unit.is_completed:
@@ -880,20 +895,28 @@ class MyAgent(IDABot):
     def request_marines(self):
         if self.keep_attacking:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 299)
+        elif self.count_bases < 3:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8* self.count_bases)
         else:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*len(self.my_bases) + 12)
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8*self.count_bases + 12)
 
     def request_marauders(self):
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2*len(self.my_bases) + 6)
+        if self.count_bases < 3:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2 * self.count_bases)
+        else:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2*len(self.my_bases) + 6)
 
     def request_tanks(self):
         self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), 2*len(self.my_bases))
 
     def request_medivacs(self):
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2*len(self.my_bases))
-
+        if self.count_bases > 2:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2*self.count_bases)
+        else:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), self.count_bases)
     def request_battlecruisers(self):
-        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 6)
+        if self.count_bases > 2:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 6)
 
     def request_workers(self):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
@@ -1003,7 +1026,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
