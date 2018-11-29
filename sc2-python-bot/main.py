@@ -96,6 +96,7 @@ class MyAgent(IDABot):
             self.request_medivacs()
             self.request_battlecruisers()
             self.build_expansion()
+            self.build_armoury()
         self.execute_worker_jobs()
         self.game_ticker += 1
 
@@ -408,6 +409,7 @@ class MyAgent(IDABot):
             self.engineering_bay_position = Point2DI(136, 29)
             self.factory_positions = [Point2DI(130, 42), Point2DI(133, 39)]
             self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
+            self.armoury_position = Point2DI(119, 28)
         else:
             self.closest_chokes = [choke_north, Point2D(43, 92), Point2D(72, 113), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
@@ -426,6 +428,10 @@ class MyAgent(IDABot):
             self.armoury_position = Point2DI(32, 139)
             self.scouting_points.reverse()
 
+    # Starport position South = [Point2DI(123, 36), Point2DI(128, 36)]
+    # Starport position North = [Point2DI(28, 132), Point2DI(23, 132)]
+
+    # Missile turret positions north = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125)]
             # Barracks positions North = [Point2DI(42.50, 134.50), Point2DI(39.50, 131.50),
     # Point2DI(38.50, 137.50), Point2DI(35.50, 134.50)]
 
@@ -573,7 +579,6 @@ class MyAgent(IDABot):
                     worker = random.choice(workers)
                     worker.build(starport_type, build_position)
                     self.worker_dict[worker] = (self.CONSTRUCTING, starport_type)
-                    # self.starport_positions.remove(build_position)
                     break
                 else:
                     print("can't build at: ", build_position)
@@ -780,13 +785,13 @@ class MyAgent(IDABot):
         elif upgrade_number == "A2":
             return self.minerals >= 175 and self.gas >= 175
         elif upgrade_number == "A3":
-            return self.minerals >= 200 and self.gas >= 200
+            return self.minerals >= 250 and self.gas >= 250
         elif upgrade_number == "W1":
             return self.minerals >= 100 and self.gas >= 100
         elif upgrade_number == "W2":
             return self.minerals >= 175 and self.gas >= 175
         elif upgrade_number == "W3":
-            return self.minerals >= 200 and self.gas >= 200
+            return self.minerals >= 250 and self.gas >= 250
 
     def research_upgrade(self, building, upgrade_type):
         my_units = self.my_units
@@ -838,6 +843,7 @@ class MyAgent(IDABot):
         self.count_refineries = 0
         self.count_engineering_bays = 0
         self.count_starports = 0
+        self.count_armouries = 0
         for unit in self.my_units:
             if unit.unit_type.is_combat_unit:
                 self.count_combat_units += 1
@@ -859,6 +865,8 @@ class MyAgent(IDABot):
                 self.count_refineries += 1
             elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_STARPORT, self) and unit.is_completed:
                 self.count_starports += 1
+            elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ARMORY, self) and unit.is_completed:
+                self.count_armouries += 1
 
     def count_units(self):
         units_to_count = [unit for unit in self.my_units if unit.unit_type in self.sought_unit_counts]
