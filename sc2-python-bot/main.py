@@ -32,6 +32,30 @@ class MyAgent(IDABot):
         self.my_bunkers = {}
         self.my_refineries = {}
         self.attack_points = []
+        self.ARMOUR_UPGRADE1 = False
+        self.ARMOUR_UPGRADE2 = False
+        self.ARMOUR_UPGRADE3 = False
+        self.DAMAGE_UPGRADE1 = False
+        self.DAMAGE_UPGRADE2 = False
+        self.DAMAGE_UPGRADE3 = False
+        self.VEHICLE_ARMOUR_UPGRADE1 = False
+        self.VEHICLE_ARMOUR_UPGRADE2 = False
+        self.VEHICLE_ARMOUR_UPGRADE3 = False
+        self.VEHICLE_DAMAGE_UPGRADE1 = False
+        self.VEHICLE_DAMAGE_UPGRADE2 = False
+        self.VEHICLE_DAMAGE_UPGRADE3 = False
+        self.SHIP_DAMAGE_UPGRADE1 = False
+        self.SHIP_DAMAGE_UPGRADE2 = False
+        self.SHIP_DAMAGE_UPGRADE3 = False
+        self.GATHERING_MINERALS = "Miner"
+        self.COLLECTING_GAS = "Collecting gas"
+        self.CONSTRUCTING = "Constructing"
+        self.SCOUT = "Scouting"
+        self.REPAIR = "Repairing"
+        self.DEFEND_CHOKE = "defending choke"
+        self.DEFEND_BUNKER = "defending bunker"
+        self.STANDBY = "standby"
+        self.ATTACKING = "Attacking"
         self.my_minerals = {}  # self.my_minerals[base_id] = list of all minerals connected to that base
         self.closest_chokes = [Point2D(116, 44)]
         self.supply_depot_positions = [Point2DI(43, 149)]
@@ -50,7 +74,6 @@ class MyAgent(IDABot):
         self.scout_counter = 0
         self.enemy_bases = []
         self.keep_attacking = False
-
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -312,11 +335,6 @@ class MyAgent(IDABot):
             for unit in standby_units:
                 self.combat_dict[unit] = (self.ATTACKING, 0)
 
-    DEFEND_CHOKE = "defending choke"
-    DEFEND_BUNKER = "defending bunker"
-    STANDBY = "standby"
-    ATTACKING = "Attacking"
-
     def get_combat_job(self, unit_type):
         if unit_type == UnitType(UNIT_TYPEID.TERRAN_MARINE, self):
             for bunker_index in range(self.count_bunkers):
@@ -384,7 +402,7 @@ class MyAgent(IDABot):
                     attack_point = self.attack_points[0]
                     unit.attack_move(attack_point)
 
-# B)
+
     def init_attack_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
             return (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2
@@ -491,12 +509,6 @@ class MyAgent(IDABot):
                     elif len(damaged_buildings)> 0 and self.count_worker_job(self.REPAIR) == 0:
                         self.worker_dict[worker] = (self.REPAIR, damaged_buildings[0])
                         break
-
-    GATHERING_MINERALS = "Miner"
-    COLLECTING_GAS = "Collecting gas"
-    CONSTRUCTING = "Constructing"
-    SCOUT = "Scouting"
-    REPAIR = "Repairing"
 
     def count_worker_job(self,job):
         if isinstance(job, tuple):
@@ -730,22 +742,6 @@ class MyAgent(IDABot):
             self.research_upgrade(barracks_tech_lab_type, concussive_shells_type)
     """
 
-    ARMOUR_UPGRADE1 = False
-    ARMOUR_UPGRADE2 = False
-    ARMOUR_UPGRADE3 = False
-    DAMAGE_UPGRADE1 = False
-    DAMAGE_UPGRADE2 = False
-    DAMAGE_UPGRADE3 = False
-    VEHICLE_ARMOUR_UPGRADE1 = False
-    VEHICLE_ARMOUR_UPGRADE2 = False
-    VEHICLE_ARMOUR_UPGRADE3 = False
-    VEHICLE_DAMAGE_UPGRADE1 = False
-    VEHICLE_DAMAGE_UPGRADE2 = False
-    VEHICLE_DAMAGE_UPGRADE3 = False
-    SHIP_DAMAGE_UPGRADE1 = False
-    SHIP_DAMAGE_UPGRADE2 = False
-    SHIP_DAMAGE_UPGRADE3 = False
-
     def research_damage_upgrade(self):
         # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         damage_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL1)
@@ -920,7 +916,6 @@ class MyAgent(IDABot):
             worker.build(command_centre_type, build_location.depot_position)
             self.worker_dict[worker] = (self.CONSTRUCTING, command_centre_type)
 
-
     def add_counted_unit(self, unit):
         if unit.unit_type not in self.unit_counter:
             self.unit_counter[unit.unit_type] = [unit]
@@ -1018,6 +1013,7 @@ class MyAgent(IDABot):
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2*self.count_bases)
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), self.count_bases)
+
     def request_battlecruisers(self):
         if self.count_bases > 2:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 6)
@@ -1132,11 +1128,11 @@ class MyAgent(IDABot):
 def main():
     coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
-    # bot2 = MyAgent()
+    bot2 = MyAgent()
 
     participant_1 = create_participants(Race.Terran, bot1)
-    # participant_2 = create_participants(Race.Terran, bot2)
-    participant_2 = create_computer(Race.Random, Difficulty.Hard)
+    participant_2 = create_participants(Race.Terran, bot2)
+    #participant_2 = create_computer(Race.Random, Difficulty.Hard)
 
     #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
