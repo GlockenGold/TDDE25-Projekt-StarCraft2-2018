@@ -42,6 +42,10 @@ class MyAgent(IDABot):
                            ]
         self.biological_units = [UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), UnitType(UNIT_TYPEID.TERRAN_MARINE, self),
                                  UnitType(UNIT_TYPEID.TERRAN_REAPER, self), UnitType(UNIT_TYPEID.TERRAN_SCV, self)]
+        self.mechanical_units = [UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self),
+                                 UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED, self),
+                                 UnitType(UNIT_TYPEID.TERRAN_RAVEN, self)]
+
         self.my_minerals = {}  # self.my_minerals[base_id] = list of all minerals connected to that base
         self.closest_chokes = [Point2D(116, 44)]
         self.supply_depot_positions = [Point2DI(43, 149)]
@@ -319,8 +323,7 @@ class MyAgent(IDABot):
             self.init_attack_points()
         if self.keep_attacking or start_attacking:
             attackers = [unit for unit in self.combat_dict if self.combat_dict[unit][0] == self.STANDBY or
-                         self.combat_dict[unit][0] == self.DEFEND_CHOKE and not unit.unit_type in
-                    [UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED, self)] ]
+                         self.combat_dict[unit][0] == self.DEFEND_CHOKE and not unit.unit_type.is_tank ]
             for unit in attackers:
                 self.combat_dict[unit] = (self.ATTACKING, 0)
 
@@ -428,14 +431,14 @@ class MyAgent(IDABot):
         choke_north = Point2D(31, 111)
         starting_pos = self.get_starting_base().position
         if squared_distance(choke_south, starting_pos) < squared_distance(choke_north, starting_pos):
-            self.closest_chokes = [choke_south, Point2D(109, 75), Point2D(80, 54), Point2D(88, 79), Point2D(63, 60)]
+            self.closest_chokes = [choke_south, Point2D(107, 56), Point2D(88, 48), Point2D(88, 79), Point2D(63, 60)]
             self.supply_depot_positions = [Point2DI(108, 19), Point2DI(106, 21), Point2DI(104, 23), Point2DI(104, 27),
                                            Point2DI(106, 25), Point2DI(108, 23), Point2DI(110, 21), Point2DI(112, 19),
                                            Point2DI(106, 29), Point2DI(108, 27), Point2DI(110, 25), Point2DI(112, 23),
                                            Point2DI(114, 21), Point2DI(116, 19), Point2DI(104, 31), Point2DI(106, 33),
                                            Point2DI(108, 31), Point2DI(110, 29), Point2DI(112, 27), Point2DI(114, 25)]
             self.barracks_positions = [Point2DI(112, 37), Point2DI(109, 34), Point2DI(116, 34), Point2DI(112, 31)]
-            self.siege_chokes = [Point2D(113, 47), Point2D(112, 73), Point2D(84, 53), Point2D(67, 60)]
+            self.siege_chokes = [Point2D(113, 47), Point2D(114, 58), Point2D(91, 46), Point2D(67, 60)]
             self.standby_rally_point = Point2D(115, 43)
             self.fusion_core_position = Point2DI(128, 20)
             self.engineering_bay_position = Point2DI(136, 29)
@@ -443,14 +446,14 @@ class MyAgent(IDABot):
             self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
             self.armoury_position = Point2DI(119, 28)
         else:
-            self.closest_chokes = [choke_north, Point2D(43, 92), Point2D(72, 113), Point2D(66, 88), Point2D(91, 106)]
+            self.closest_chokes = [choke_north, Point2D(45, 106), Point2D(72, 113), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
                                            Point2DI(41, 147), Point2DI(43, 145), Point2DI(45, 143), Point2DI(47, 141),
                                            Point2DI(37, 147), Point2DI(39, 145), Point2DI(41, 143), Point2DI(43, 141),
                                            Point2DI(45, 139), Point2DI(47, 137), Point2DI(34, 147), Point2DI(36, 145),
                                            Point2DI(37, 143), Point2DI(40, 141), Point2DI(42, 139), Point2DI(44, 137)]
             self.barracks_positions = [Point2DI(41, 133), Point2DI(37, 130), Point2DI(37, 136), Point2DI(34, 133)]
-            self.siege_chokes = [Point2D(39, 120), Point2D(41, 96), Point2D(66, 117), Point2D(85, 107)]
+            self.siege_chokes = [Point2D(39, 120), Point2D(42, 110), Point2D(66, 117), Point2D(85, 107)]
 
             self.standby_rally_point = Point2D(35, 125)
             self.fusion_core_position = Point2DI(22, 147)
@@ -484,8 +487,9 @@ class MyAgent(IDABot):
                 self.worker_dict.pop(worker)
             if worker_not_needed:
                 worker.stop()
-        damaged_buildings = [unit for unit in self.my_units if unit.unit_type.is_building and unit.is_completed and
-                             unit.hit_points < 400]
+        damaged_buildings = [unit for unit in self.my_units if
+                             (unit.unit_type in self.mechanical_units and unit.hit_points < 100) or
+                             (unit.is_completed and unit.unit_type.is_building and unit.hit_points < 400)]
         my_workers = sorted(self.get_my_workers(), key=lambda worker_id: worker_id.id)
         base_locations = self.my_bases
         needed_gas_collectors = {}
@@ -1053,15 +1057,16 @@ class MyAgent(IDABot):
 
     def request_medivacs(self):
         if self.count_completed_bases > 2:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 2 * self.count_completed_bases)
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 1 + self.count_completed_bases)
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), self.count_completed_bases)
     def request_battlecruisers(self):
         if self.keep_attacking:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 10)
-        if self.count_completed_bases > 2:
+        elif self.count_completed_bases > 2:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 6)
-
+        else:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self), 0)
     def request_workers(self):
         scv_type = UnitType(UNIT_TYPEID.TERRAN_SCV, self)
         amount_wanted = 4
