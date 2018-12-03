@@ -17,6 +17,7 @@ class CombatJob(Enum):
     defending_bunker = 2
     standby = 3
     attacking = 4
+    harassing = 5
 
 class MyAgent(IDABot):
     def __init__(self):
@@ -82,6 +83,7 @@ class MyAgent(IDABot):
         self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
         self.armoury_position = Point2DI(33, 33)
         self.missile_turret_positions = [Point2DI(33, 33)]
+        self.harass_positions = [Point2D(10,10)]
         self.scout_counter = 0
         self.enemy_bases = []
         self.keep_attacking = False
@@ -145,6 +147,7 @@ class MyAgent(IDABot):
             self.request_tanks()
             self.request_marauders()
             self.request_medivacs()
+            self.request_banshees()
             self.request_battlecruisers()
             self.request_vikings()
             self.request_ravens()
@@ -287,6 +290,7 @@ class MyAgent(IDABot):
         count_bunker_bois = self.count_combat_job(CombatJob.defending_bunker)
         count_standby = self.count_combat_job(CombatJob.standby)
         count_attackers = self.count_combat_job(CombatJob.attacking)
+        count_harassers = self.count_combat_job(CombatJob.harassing)
         overview_string = " Unit assignments \n" \
                           " ---------------- \n" \
                           " Miners:           {} \n" \
@@ -296,14 +300,16 @@ class MyAgent(IDABot):
                           " Choke Defenders:  {} \n" \
                           " Bunker Defenders: {} \n" \
                           " Standby Units:    {} \n" \
-                          " Attacking Units:  {}".format(count_miners,
+                          " Attacking Units:    {} \n" \
+                          " Harassing Units:  {}".format(count_miners,
                                                                                       count_gas_collectors,
                                                                                       count_builders,
                                                                                       count_scouts,
                                                                                       count_choke_defenders,
                                                                                       count_bunker_bois,
                                                                                       count_standby,
-                                                                                      count_attackers)
+                                                                                      count_attackers,
+                                                                                      count_harassers)
         self.map_tools.draw_text_screen(0.005, 0.005, overview_string, Color.WHITE)
 
     def get_mineral_list(self):
@@ -388,7 +394,8 @@ class MyAgent(IDABot):
                 job = (CombatJob.defending_choke, base_index)
                 if self.count_combat_job(job, unit_type) < 2:
                     return job
-
+        if unit_type == UnitType(UNIT_TYPEID.TERRAN_BANSHEE, self):
+            return (CombatJob.harassing, 0)
         return (CombatJob.standby, 0)
 
     def count_combat_job(self, job, unit_type = None):
@@ -458,6 +465,21 @@ class MyAgent(IDABot):
                         self.init_attack_points()
                     attack_point = self.attack_points[0]
                     unit.attack_move(attack_point)
+                elif job[0] == CombatJob.harassing:
+                    on_the_way = False
+                    for position_index, move_position in enumerate(self.harass_positions):
+                        if squared_distance(unit.position, move_position) < 3:
+                            on_the_way = True
+                            if position_index == 0:
+                                unit.move(self.harass_positions[position_index + 1])
+                            elif position_index == 1:
+                                unit.attack_move(self.harass_positions[position_index + 1])
+                            else:
+                                self.combat_dict[unit] = (CombatJob.standby, 0)
+                            break
+                    if not on_the_way:
+                        unit.move(self.harass_positions[0])
+
 
     def init_attack_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -492,6 +514,7 @@ class MyAgent(IDABot):
             self.missile_turret_positions = [Point2DI(135, 24), Point2DI(132, 21), Point2DI(108, 43), Point2DI(110, 45),
                                              Point2DI(136, 53), Point2DI(132, 48), Point2DI(105, 56), Point2DI(112, 61),
                                              Point2DI(96, 30)]
+            self.harass_positions = [Point2D(10, 10),  Point2D(10,147), Point2D(18,144)]
         else:
             self.closest_chokes = [choke_north, Point2D(45, 106), Point2D(65, 120), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
@@ -511,6 +534,7 @@ class MyAgent(IDABot):
             self.missile_turret_positions = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125),
                                              Point2DI(16, 114), Point2DI(19, 119), Point2DI(49, 108), Point2DI(45, 110),
                                              Point2DI(66, 133), Point2DI(61, 115), Point2DI(55, 139)]
+            self.harass_positions = [Point2D(10, 10), Point2D(135, 10), Point2D(132,24)]
             self.scouting_points.reverse()
 
     def reset_research(self):
@@ -1117,12 +1141,15 @@ class MyAgent(IDABot):
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 200)
         elif self.count_completed_bases == 1:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8 * self.count_completed_bases)
+        elif self.count_completed_bases == 2:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8 * self.count_completed_bases + 4)
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARINE, self), 8 * self.count_completed_bases + 12)
-
     def request_marauders(self):
         if self.count_completed_bases == 1:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2 * self.count_completed_bases)
+        elif self.count_completed_bases == 2:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2 * self.count_completed_bases + 2)
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), 2*len(self.my_bases) + 6)
 
@@ -1135,11 +1162,14 @@ class MyAgent(IDABot):
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self), 1)
 
+    def request_banshees(self):
+        self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_BANSHEE, self), 2)
+
     def request_vikings(self):
         if self.count_completed_bases > 2:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_VIKINGFIGHTER, self), 2 + self.count_completed_bases)
         else:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_VIKINGFIGHTER, self), 4)
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_VIKINGFIGHTER, self), 2)
 
     def request_battlecruisers(self):
         if self.keep_attacking:
@@ -1151,11 +1181,11 @@ class MyAgent(IDABot):
 
     def request_hellbats(self):
         if self.keep_attacking:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLION, self), 10)
-        elif self.count_siegetanks > 2 * self.count_all_bases:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLION, self), 8)
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLIONTANK, self), 10)
+        elif self.count_siegetanks >= 2 * self.count_all_bases:
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLIONTANK, self), 8)
         else:
-            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLION, self), 0)
+            self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLIONTANK, self), 0)
 
 
     def request_ravens(self):
@@ -1280,7 +1310,7 @@ def main():
 
     participant_1 = create_participants(Race.Terran, bot1)
     # participant_2 = create_participants(Race.Terran, bot2)
-    participant_2 = create_computer(Race.Random, Difficulty.Hard)
+    participant_2 = create_computer(Race.Random, Difficulty.HardVeryHard)
 
     #coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
