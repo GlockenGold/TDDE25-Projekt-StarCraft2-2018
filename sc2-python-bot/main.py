@@ -38,21 +38,6 @@ class MyAgent(IDABot):
         self.my_bunkers = {}
         self.my_refineries = {}
         self.attack_points = []
-        self.ARMOUR_UPGRADE1 = False
-        self.ARMOUR_UPGRADE2 = False
-        self.ARMOUR_UPGRADE3 = False
-        self.DAMAGE_UPGRADE1 = False
-        self.DAMAGE_UPGRADE2 = False
-        self.DAMAGE_UPGRADE3 = False
-        self.VEHICLE_ARMOUR_UPGRADE1 = False
-        self.VEHICLE_ARMOUR_UPGRADE2 = False
-        self.VEHICLE_ARMOUR_UPGRADE3 = False
-        self.VEHICLE_DAMAGE_UPGRADE1 = False
-        self.VEHICLE_DAMAGE_UPGRADE2 = False
-        self.VEHICLE_DAMAGE_UPGRADE3 = False
-        self.SHIP_DAMAGE_UPGRADE1 = False
-        self.SHIP_DAMAGE_UPGRADE2 = False
-        self.SHIP_DAMAGE_UPGRADE3 = False
         self.GATHERING_MINERALS = "Miner"
         self.COLLECTING_GAS = "Collecting gas"
         self.CONSTRUCTING = "Constructing"
@@ -94,6 +79,13 @@ class MyAgent(IDABot):
         self.scout_counter = 0
         self.enemy_bases = []
         self.keep_attacking = False
+        self.engineering_bay_research = {"infDamage1": False, "infArmour1": False, "infDamage2": False,
+                                         "infArmour2": False, "infDamage3": False,
+                                         "infArmour3": False, "hiSecTracking": False}
+        self.armoury_research = {"shipDamage1": False, "vehicleArmour1": False, "vehicleDamage1": False,
+                                 "shipDamage2": False, "vehicleArmour2": False, "vehicleDamage2": False,
+                                 "shipDamage3": False, "vehicleArmour3": False, "vehicleDamage3": False}
+        self.barracks_tech_lab_research = {"combatShields": False, "concussiveShells": False}
 
     def on_game_start(self):
         IDABot.on_game_start(self)
@@ -155,6 +147,7 @@ class MyAgent(IDABot):
             self.correct_workers()
         if self.game_ticker % 1000 == 0:
             self.stop_scvs()
+            self.reset_research()
         self.execute_worker_jobs()
         self.game_ticker += 1
 
@@ -513,6 +506,15 @@ class MyAgent(IDABot):
                                              Point2DI(66, 133), Point2DI(61, 115), Point2DI(55, 139)]
             self.scouting_points.reverse()
 
+    def reset_research(self):
+        self.engineering_bay_research = {"infDamage1": False, "infArmour1": False, "infDamage2": False,
+                                         "infArmour2": False, "infDamage3": False,
+                                         "infArmour3": False, "hiSecTracking": False}
+        self.armoury_research = {"shipDamage1": False, "vehicleArmour1": False, "vehicleDamage1": False,
+                                 "shipDamage2": False, "vehicleArmour2": False, "vehicleDamage2": False,
+                                 "shipDamage3": False, "vehicleArmour3": False, "vehicleDamage3": False}
+        self.barracks_tech_lab_research = {"combatShields": False, "concussiveShells": False}
+
     # Starport position South = [Point2DI(123, 36), Point2DI(128, 36)]
     # Starport position North = [Point2DI(28, 132), Point2DI(23, 132)]
 
@@ -831,35 +833,39 @@ class MyAgent(IDABot):
 
     CONCUSSIVE_SHELLS_RESEARCHED = False
     COMBAT_SHIELDS_RESEARCHED = False
+    AUTO_TRACKING_DONE = False
 
     def research_combat_shields(self):
         combat_shields_type = UpgradeID(UPGRADE_ID.SHIELDWALL)
         barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
-        if not self.COMBAT_SHIELDS_RESEARCHED and self.can_afford_upgrade("1"):
-            print(self.COMBAT_SHIELDS_RESEARCHED)
-            self.research_upgrade(barracks_tech_lab_type, combat_shields_type)
-            self.COMBAT_SHIELDS_RESEARCHED = True
+        for unit in self.my_units:
+            if unit.unit_type == barracks_tech_lab_type and unit.is_completed and unit.is_idle:
+                if not self.barracks_tech_lab_research["combatShields"] and self.can_afford_upgrade("1"):
+                    print("Combat Shields: ", self.barracks_tech_lab_research["combatShields"])
+                    self.research_upgrade(barracks_tech_lab_type, combat_shields_type)
+                    self.barracks_tech_lab_research["combatShields"] = True
 
     def research_concussive_shells(self):
         concussive_shells_type = UpgradeID(UPGRADE_ID.PUNISHERGRENADES)
         barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
-        if not self.CONCUSSIVE_SHELLS_RESEARCHED and self.minerals >= 50 and self.gas >= 50:
-            print(self.CONCUSSIVE_SHELLS_RESEARCHED)
-            self.research_upgrade(barracks_tech_lab_type, concussive_shells_type)
-            self.CONCUSSIVE_SHELLS_RESEARCHED = True
-
-    AUTO_TRACKING_DONE = False
+        for unit in self.my_units:
+            if unit.unit_type == barracks_tech_lab_type and unit.is_completed and unit.is_idle:
+                if not self.barracks_tech_lab_research["concussiveShells"] and self.minerals >= 50 and self.gas >= 50:
+                    print("Concussive Shells:", self.barracks_tech_lab_research["concussiveShells"])
+                    self.research_upgrade(barracks_tech_lab_type, concussive_shells_type)
+                    self.barracks_tech_lab_research["concussiveShells"] = True
 
     def research_auto_tracking(self):
         auto_tracking_upgrade = UpgradeID(UPGRADE_ID.HISECAUTOTRACKING)
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
             if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and self.DAMAGE_UPGRADE1 and self.ARMOUR_UPGRADE1 \
-                        and not self.AUTO_TRACKING_DONE:
+                if self.can_afford_upgrade("1") and self.engineering_bay_research["infDamage1"] and\
+                        self.engineering_bay_research["infArmour1"] \
+                        and not self.engineering_bay_research["hiSecTracking"]:
                     print("Hi-Sec Auto Tracking")
                     self.research_upgrade(auto_tracking_upgrade, engineering_bay_type)
-                    self.AUTO_TRACKING_DONE = True
+                    self.engineering_bay_research["hiSecTracking"] = True
                     break
 
     def research_damage_upgrade(self):
@@ -870,20 +876,20 @@ class MyAgent(IDABot):
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
             if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and not self.DAMAGE_UPGRADE1:
-                    print("Damage Upgrade 1: ", self.DAMAGE_UPGRADE1)
+                if self.can_afford_upgrade("1") and not self.engineering_bay_research["infDamage1"]:
+                    print("Damage Upgrade 1: ", self.engineering_bay_research["infDamage1"])
                     self.research_upgrade(engineering_bay_type, damage_upgrade_type1)
-                    self.DAMAGE_UPGRADE1 = True
+                    self.engineering_bay_research["infDamage1"] = True
                     break
-                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.DAMAGE_UPGRADE2:
-                    print("Damage Upgrade 2: ", self.DAMAGE_UPGRADE2)
+                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.engineering_bay_research["infDamage2"]:
+                    print("Damage Upgrade 2: ", self.engineering_bay_research["infDamage2"])
                     self.research_upgrade(engineering_bay_type, damage_upgrade_type2)
-                    self.DAMAGE_UPGRADE2 = True
+                    self.engineering_bay_research["infDamage2"] = True
                     break
-                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.DAMAGE_UPGRADE3:
-                    print("Damage Upgrade 3: ", self.DAMAGE_UPGRADE3)
+                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.engineering_bay_research["infDamage3"]:
+                    print("Damage Upgrade 3: ", self.engineering_bay_research["infDamage3"])
                     self.research_upgrade(engineering_bay_type, damage_upgrade_type3)
-                    self.DAMAGE_UPGRADE3 = True
+                    self.engineering_bay_research["infDamage3"] = True
                     break
 
     def research_armour_upgrade(self):
@@ -894,20 +900,22 @@ class MyAgent(IDABot):
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
             if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and not self.ARMOUR_UPGRADE1:
-                    print("Armour Upgrade 1: ", self.ARMOUR_UPGRADE1)
+                if self.can_afford_upgrade("1") and not self.engineering_bay_research["infArmour1"]:
+                    print("Armour Upgrade 1: ", self.engineering_bay_research["infArmour1"])
                     self.research_upgrade(engineering_bay_type, armour_upgrade_type1)
-                    self.ARMOUR_UPGRADE1 = True
+                    self.engineering_bay_research["infArmour1"] = True
                     break
-                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.ARMOUR_UPGRADE2:
-                    print("Armour Upgrade 2: ", self.ARMOUR_UPGRADE2)
+                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not \
+                        self.engineering_bay_research["infArmour2"]:
+                    print("Armour Upgrade 2: ", self.engineering_bay_research["infArmour1"])
                     self.research_upgrade(engineering_bay_type, armour_upgrade_type2)
-                    self.ARMOUR_UPGRADE2 = True
+                    self.engineering_bay_research["infArmour2"] = True
                     break
-                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.ARMOUR_UPGRADE3:
-                    print("Armour Upgrade 3: ", self.ARMOUR_UPGRADE3)
+                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not \
+                        self.engineering_bay_research["infArmour3"]:
+                    print("Armour Upgrade 3: ", self.engineering_bay_research["infArmour1"])
                     self.research_upgrade(engineering_bay_type, armour_upgrade_type3)
-                    self.ARMOUR_UPGRADE3 = True
+                    self.engineering_bay_research["infArmour3"] = True
                     break
 
     def research_vehicle_armour_upgrade(self):
@@ -918,17 +926,17 @@ class MyAgent(IDABot):
         armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
         for unit in self.my_units:
             if unit.unit_type == armoury_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and not self.VEHICLE_ARMOUR_UPGRADE1:
+                if self.can_afford_upgrade("1") and not self.armoury_research["vehicleArmour1"]:
                     self.research_upgrade(armoury_type, vehicle_armour_upgrade_type1)
-                    self.VEHICLE_ARMOUR_UPGRADE1 = True
+                    self.armoury_research["vehicleArmour1"] = True
                     break
-                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.VEHICLE_ARMOUR_UPGRADE2:
+                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.armoury_research["vehicleArmour2"]:
                     self.research_upgrade(armoury_type, vehicle_armour_upgrade_type2)
-                    self.VEHICLE_ARMOUR_UPGRADE2 = True
+                    self.armoury_research["vehicleArmour2"] = True
                     break
-                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.VEHICLE_ARMOUR_UPGRADE3:
+                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.armoury_research["vehicleArmour3"]:
                     self.research_upgrade(armoury_type, vehicle_armour_upgrade_type3)
-                    self.VEHICLE_ARMOUR_UPGRADE3 = True
+                    self.armoury_research["vehicleArmour3"] = True
                     break
 
     def research_ship_damage_upgrade(self):
@@ -939,17 +947,17 @@ class MyAgent(IDABot):
         armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
         for unit in self.my_units:
             if unit.unit_type == armoury_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and not self.SHIP_DAMAGE_UPGRADE1:
+                if self.can_afford_upgrade("1") and not self.armoury_research["shipDamage1"]:
                     self.research_upgrade(armoury_type, air_damage_upgrade_type1)
-                    self.SHIP_DAMAGE_UPGRADE1 = True
+                    self.armoury_research["shipDamage1"] = True
                     break
-                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.SHIP_DAMAGE_UPGRADE2:
+                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.armoury_research["shipDamage2"]:
                     self.research_upgrade(armoury_type, air_damage_upgrade_type2)
-                    self.SHIP_DAMAGE_UPGRADE2 = True
+                    self.armoury_research["shipDamage2"] = True
                     break
-                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.SHIP_DAMAGE_UPGRADE3:
+                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.armoury_research["shipDamage3"]:
                     self.research_upgrade(armoury_type, air_damage_upgrade_type3)
-                    self.SHIP_DAMAGE_UPGRADE3 = True
+                    self.armoury_research["shipDamage3"] = True
                     break
 
     def research_vehicle_damage_upgrade(self):
@@ -960,17 +968,17 @@ class MyAgent(IDABot):
         armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
         for unit in self.my_units:
             if unit.unit_type == armoury_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and not self.VEHICLE_DAMAGE_UPGRADE1:
+                if self.can_afford_upgrade("1") and not self.armoury_research["vehicleDamage1"]:
                     self.research_upgrade(armoury_type, vehicle_damage_upgrade_type1)
-                    self.VEHICLE_DAMAGE_UPGRADE1 = True
+                    self.armoury_research["vehicleDamage1"] = True
                     break
-                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.VEHICLE_DAMAGE_UPGRADE2:
+                elif self.can_afford_upgrade("2") and self.count_armouries >= 1 and not self.armoury_research["vehicleDamage2"]:
                     self.research_upgrade(armoury_type, vehicle_damage_upgrade_type2)
-                    self.VEHICLE_DAMAGE_UPGRADE2 = True
+                    self.armoury_research["vehicleDamage2"] = True
                     break
-                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.VEHICLE_DAMAGE_UPGRADE3:
+                elif self.can_afford_upgrade("3") and self.count_armouries >= 1 and not self.armoury_research["vehicleDamage3"]:
                     self.research_upgrade(armoury_type, vehicle_damage_upgrade_type3)
-                    self.VEHICLE_DAMAGE_UPGRADE3 = True
+                    self.armoury_research["vehicleDamage3"] = True
                     break
 
     def can_afford_upgrade(self, upgrade_number):
@@ -987,9 +995,6 @@ class MyAgent(IDABot):
             if unit.unit_type == building and unit.is_completed and unit.is_idle:
                 print("Research Upgrade")
                 unit.research(upgrade_type)
-            # elif unit.unit_type == building and unit.is_completed and unit.is_idle and \
-            #        isinstance(upgrade_type, AbilityID):
-            #    pass
 
     def build_expansion(self):
         command_centre_type = UnitType(UNIT_TYPEID.TERRAN_COMMANDCENTER, self)
@@ -1266,7 +1271,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
