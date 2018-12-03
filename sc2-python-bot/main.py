@@ -115,6 +115,8 @@ class MyAgent(IDABot):
         if self.game_ticker % 2 == 0:
             self.train_requests()
             self.research_vehicle_damage_upgrade()
+            self.research_combat_shields()
+            self.research_concussive_shells()
         if (self.game_ticker + 1) % 2 == 0:
             self.research_damage_upgrade()
             self.research_ship_damage_upgrade()
@@ -788,24 +790,25 @@ class MyAgent(IDABot):
                     worker.build_target(refinery_type, build_location)
                     self.worker_dict[worker] = (self.CONSTRUCTING, refinery_type)
                     break
-    """
+
     CONCUSSIVE_SHELLS_RESEARCHED = False
     COMBAT_SHIELDS_RESEARCHED = False
 
     def research_combat_shields(self):
-        # .research och .train kan inte ha AbilityID som argument, hitta något annat sätt att kalla dem
-        combat_shields_type = AbilityID(ABILITY_ID.RESEARCH_COMBATSHIELD)
+        combat_shields_type = UpgradeID(UPGRADE_ID.SHIELDWALL)
         barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
-        if not self.COMBAT_SHIELDS_RESEARCHED:
+        if not self.COMBAT_SHIELDS_RESEARCHED and self.can_afford_upgrade("1"):
+            print(self.COMBAT_SHIELDS_RESEARCHED)
             self.research_upgrade(barracks_tech_lab_type, combat_shields_type)
+            self.COMBAT_SHIELDS_RESEARCHED = True
 
     def research_concussive_shells(self):
-        # .research och .train kan inte ha AbilityID som argument, hitta något annat sätt att kalla dem
-        concussive_shells_type = AbilityID(ABILITY_ID.RESEARCH_CONCUSSIVESHELLS)
+        concussive_shells_type = UpgradeID(UPGRADE_ID.PUNISHERGRENADES)
         barracks_tech_lab_type = UnitType(UNIT_TYPEID.TERRAN_BARRACKSTECHLAB, self)
-        if not self.CONCUSSIVE_SHELLS_RESEARCHED:
+        if not self.CONCUSSIVE_SHELLS_RESEARCHED and self.minerals >= 50 and self.gas >= 50:
+            print(self.CONCUSSIVE_SHELLS_RESEARCHED)
             self.research_upgrade(barracks_tech_lab_type, concussive_shells_type)
-    """
+            self.CONCUSSIVE_SHELLS_RESEARCHED = True
 
     AUTO_TRACKING_DONE = False
 
@@ -1106,6 +1109,8 @@ class MyAgent(IDABot):
         amount_wanted += 3 * len(self.my_refineries)
         for index, base_location in enumerate(self.my_bases):
             amount_wanted += 2 * len(self.my_minerals[index])
+        if amount_wanted > 60:
+            amount_wanted = 60
         self.request_unit_amount(scv_type, amount_wanted)
 
     def request_unit_amount(self, unit_type, amount_sought):
