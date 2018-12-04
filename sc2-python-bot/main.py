@@ -5,6 +5,7 @@ from typing import Optional
 from library import *
 from enum import Enum
 
+
 class WorkerJob(Enum):
     collecting_gas = 1
     constructing = 2
@@ -12,11 +13,13 @@ class WorkerJob(Enum):
     repairing = 4
     mining = 5
 
+
 class CombatJob(Enum):
     defending_choke = 1
     defending_bunker = 2
     standby = 3
     attacking = 4
+
 
 class MyAgent(IDABot):
     def __init__(self):
@@ -77,17 +80,17 @@ class MyAgent(IDABot):
                                 Point2D(123, 86), Point2D(89, 72), Point2D(66, 55), Point2D(28, 32),
                                 Point2D(60, 31), Point2D(90, 40), Point2D(124, 57), Point2D(122, 31)]
         self.fusion_core_position = Point2DI(128, 20)
-        self.engineering_bay_position = Point2DI(136, 29)
+        self.engineering_bay_positions = [Point2DI(136, 29)]
         self.factory_positions = [Point2DI(130, 42), Point2DI(133, 39)]
         self.starport_positions = [Point2DI(123, 36), Point2DI(128, 36)]
-        self.armoury_position = Point2DI(33, 33)
+        self.armoury_positions = [Point2DI(33, 33)]
         self.missile_turret_positions = [Point2DI(33, 33)]
         self.scout_counter = 0
         self.enemy_bases = []
         self.keep_attacking = False
         self.engineering_bay_research = {"infDamage1": False, "infArmour1": False, "infDamage2": False,
-                                         "infArmour2": False, "infDamage3": False,
-                                         "infArmour3": False, "hiSecTracking": False}
+                                         "infArmour2": False, "infDamage3": False, "infArmour3": False,
+                                         "hiSecTracking": False, "structureArmour": False}
         self.armoury_research = {"shipDamage1": False, "vehicleArmour1": False, "vehicleDamage1": False,
                                  "shipDamage2": False, "vehicleArmour2": False, "vehicleDamage2": False,
                                  "shipDamage3": False, "vehicleArmour3": False, "vehicleDamage3": False}
@@ -124,7 +127,9 @@ class MyAgent(IDABot):
         if (self.game_ticker + 1) % 2 == 0:
             self.research_damage_upgrade()
             self.research_ship_damage_upgrade()
+            self.research_auto_tracking()
             self.execute_worker_jobs()
+            self.research_structure_armour()
         if self.game_ticker % 5 == 0:
             self.build_refineries()
             self.build_depots()
@@ -223,7 +228,7 @@ class MyAgent(IDABot):
         for index, unit in enumerate(self.my_units):
             if unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_FACTORY, self) or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_STARPORT, self) \
                     or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_MISSILETURRET, self) or \
-                    unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ARMORY, self):
+                    unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ARMORY, self) or unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self):
                 debug_string = "<{}>".format(unit.position)
                 self.map_tools.draw_text(unit.position, debug_string, Color.TEAL)
         for index, unit in enumerate(my_workers):
@@ -485,13 +490,13 @@ class MyAgent(IDABot):
             self.siege_chokes = [Point2D(113, 47), Point2D(113, 55), Point2D(91, 46), Point2D(67, 60)]
             self.standby_rally_point = Point2D(115, 43)
             self.fusion_core_position = Point2DI(128, 20)
-            self.engineering_bay_position = Point2DI(136, 29)
-            self.starport_positions = [Point2DI(130, 42), Point2DI(133, 39)]
+            self.engineering_bay_positions = [Point2DI(136, 29), Point2DI(135, 26)]
+            self.starport_positions = [Point2DI(130, 42), Point2DI(133, 39), Point2DI(125, 41)]
             self.factory_positions = [Point2DI(123, 36), Point2DI(128, 36)]
-            self.armoury_position = Point2DI(119, 28)
-            self.missile_turret_positions = [Point2DI(135, 24), Point2DI(132, 21), Point2DI(108, 43), Point2DI(110, 45),
-                                             Point2DI(136, 53), Point2DI(132, 48), Point2DI(105, 56), Point2DI(112, 61),
-                                             Point2DI(96, 30)]
+            self.armoury_positions = [Point2DI(119, 28), Point2DI(118, 25)]
+            self.missile_turret_positions = [Point2DI(135, 24), Point2DI(132, 21), Point2DI(110, 18), Point2DI(104, 25),
+                                             Point2DI(108, 43), Point2DI(110, 45), Point2DI(136, 53), Point2DI(132, 48),
+                                             Point2DI(105, 56), Point2DI(112, 61), Point2DI(96, 30)]
         else:
             self.closest_chokes = [choke_north, Point2D(45, 106), Point2D(65, 120), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
@@ -504,19 +509,20 @@ class MyAgent(IDABot):
 
             self.standby_rally_point = Point2D(35, 125)
             self.fusion_core_position = Point2DI(22, 147)
-            self.engineering_bay_position = Point2DI(16, 140)
-            self.starport_positions = [Point2DI(21, 124), Point2DI(17, 129)]
+            self.engineering_bay_positions = [Point2DI(16, 140), Point2DI(16, 136)] # Lägg till en till engineering_bay position och fixa build_engineering_bay så den stödjer lista
+            self.starport_positions = [Point2DI(21, 124), Point2DI(17, 129), Point2DI(26, 126)]
             self.factory_positions = [Point2DI(28, 132), Point2DI(23, 132)]
-            self.armoury_position = Point2DI(32, 139)
-            self.missile_turret_positions = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125),
+            self.armoury_positions = [Point2DI(32, 139), Point2DI(33, 142)] # Ändra i build_armoury så den räknar med lista istället för fixt position
+            self.missile_turret_positions = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(41, 150), Point2DI(48, 143),
                                              Point2DI(16, 114), Point2DI(19, 119), Point2DI(49, 108), Point2DI(45, 110),
-                                             Point2DI(66, 133), Point2DI(61, 115), Point2DI(55, 139)]
+                                             Point2DI(66, 133), Point2DI(61, 115), Point2DI(55, 139), Point2DI(40, 122),
+                                             Point2DI(44, 125)]
             self.scouting_points.reverse()
 
     def reset_research(self):
         self.engineering_bay_research = {"infDamage1": False, "infArmour1": False, "infDamage2": False,
-                                         "infArmour2": False, "infDamage3": False,
-                                         "infArmour3": False, "hiSecTracking": False}
+                                         "infArmour2": False, "infDamage3": False, "infArmour3": False,
+                                         "hiSecTracking": False, "structureArmour": False}
         self.armoury_research = {"shipDamage1": False, "vehicleArmour1": False, "vehicleDamage1": False,
                                  "shipDamage2": False, "vehicleArmour2": False, "vehicleDamage2": False,
                                  "shipDamage3": False, "vehicleArmour3": False, "vehicleDamage3": False}
@@ -526,7 +532,7 @@ class MyAgent(IDABot):
     # Starport position North = [Point2DI(28, 132), Point2DI(23, 132)]
 
     # Missile turret positions north = [Point2DI(19, 148), Point2DI(16, 145), Point2DI(40, 122), Point2DI(44, 125)]
-            # Barracks positions North = [Point2DI(42.50, 134.50), Point2DI(39.50, 131.50),
+    # Barracks positions North = [Point2DI(42.50, 134.50), Point2DI(39.50, 131.50),
     # Point2DI(38.50, 137.50), Point2DI(35.50, 134.50)]
 
     # Barracks position South = [Point2DI(111.50, 36.50), Point2DI(108.50, 33.50),
@@ -648,7 +654,7 @@ class MyAgent(IDABot):
                     worker = random.choice(self.my_workers)
                     print('Building factory at', build_position)
                     worker.build(factory_type, build_position)
-                    # self.factory_positions.remove(build_position)
+                    self.factory_positions.remove(build_position)
                     self.worker_dict[worker] = (WorkerJob.constructing, factory_type)
                     break
                 else:
@@ -666,15 +672,21 @@ class MyAgent(IDABot):
     def build_engineering_bay(self):
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         amount_constructing = self.count_worker_job((WorkerJob.constructing, engineering_bay_type))
-        if not self.engineering_bay_position and self.count_engineering_bays < 1:
+        if not self.engineering_bay_positions and self.count_engineering_bays < 2:
             self.set_choke_points()
-        if amount_constructing == 0 and self.can_afford(engineering_bay_type) and self.count_engineering_bays < 1 \
+        if amount_constructing == 0 and self.can_afford(engineering_bay_type) and self.count_engineering_bays < 2 \
                 and self.count_completed_barracks >= 2 and self.count_completed_bases > 1:
-            build_position = self.engineering_bay_position
-            worker = random.choice(self.my_workers)
-            print('Building engineering bay at', build_position)
-            worker.build(engineering_bay_type, build_position)
-            self.worker_dict[worker] = (WorkerJob.constructing, engineering_bay_type)
+            for build_position in self.engineering_bay_positions:
+                if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, engineering_bay_type):
+                    worker = random.choice(self.my_workers)
+                    print('Building engineering bay at', build_position)
+                    worker.build(engineering_bay_type, build_position)
+                    self.worker_dict[worker] = (WorkerJob.constructing, engineering_bay_type)
+                    self.engineering_bay_positions.remove(build_position)
+                    break
+                else:
+                    print("Can't build Engineering Bay at: ", build_position)
+                    self.engineering_bay_positions.remove(build_position)
 
     def build_missile_turrets(self):
         workers = self.my_workers
@@ -698,10 +710,10 @@ class MyAgent(IDABot):
     def build_starport(self):
         starport_type = UnitType(UNIT_TYPEID.TERRAN_STARPORT, self)
         amount_constructing = self.count_worker_job((WorkerJob.constructing, starport_type))
-        if len(self.starport_positions) == 0 and self.count_starports < 2:
+        if len(self.starport_positions) == 0 and self.count_starports < 3:
             self.set_choke_points()
         if self.count_factories > 1 and self.can_afford(starport_type) and amount_constructing == 0 \
-                and self.count_starports < 2 and self.count_completed_bases > 1:
+                and self.count_starports < 3 and self.count_completed_bases > 1:
             for build_position in self.starport_positions:
                 if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, starport_type):
                     worker = random.choice(self.my_workers)
@@ -792,14 +804,21 @@ class MyAgent(IDABot):
     def build_armoury(self):
         armoury_type = UnitType(UNIT_TYPEID.TERRAN_ARMORY, self)
         amount_constructing = self.count_worker_job((WorkerJob.constructing, armoury_type))
+        if len(self.armoury_positions) == 0 and self.count_armouries < 2:
+            self.set_choke_points()
         if amount_constructing == 0 and self.can_afford(armoury_type) and self.max_supply >= 23 \
-                and self.count_engineering_bays >= 1 and self.count_completed_bases >= 2 and self.count_armouries < 1:
-            build_position = self.armoury_position
-            if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, armoury_type):
-                worker = random.choice(self.my_workers)
-                print('Building armory at', build_position)
-                worker.build(armoury_type, build_position)
-                self.worker_dict[worker] = (WorkerJob.constructing, armoury_type)
+                and self.count_engineering_bays >= 1 and self.count_completed_bases >= 2 and self.count_armouries < 2:
+            for build_position in self.armoury_positions:
+                if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, armoury_type):
+                    worker = random.choice(self.my_workers)
+                    print('Building armory at', build_position)
+                    worker.build(armoury_type, build_position)
+                    self.worker_dict[worker] = (WorkerJob.constructing, armoury_type)
+                    self.armoury_positions.remove(build_position)
+                    break
+                else:
+                    print("Can't build Armoury at: ", build_position)
+                    self.armoury_positions.remove(build_position)
 
     def build_depots(self):
         """Constructs an additional supply depot if current supply is reaching supply maximum """
@@ -863,16 +882,24 @@ class MyAgent(IDABot):
         engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
         for unit in self.my_units:
             if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
-                if self.can_afford_upgrade("1") and self.engineering_bay_research["infDamage1"] and\
-                        self.engineering_bay_research["infArmour1"] \
-                        and not self.engineering_bay_research["hiSecTracking"]:
+                if self.can_afford_upgrade("1") and not self.engineering_bay_research["hiSecTracking"]:
+                    self.research_upgrade(engineering_bay_type, auto_tracking_upgrade)
                     print("Hi-Sec Auto Tracking")
-                    self.research_upgrade(auto_tracking_upgrade, engineering_bay_type)
                     self.engineering_bay_research["hiSecTracking"] = True
                     break
 
+    def research_structure_armour(self):
+        structure_armour_upgrade = UpgradeID(UPGRADE_ID.TERRANBUILDINGARMOR)
+        engineering_bay_type = UnitType(UNIT_TYPEID.TERRAN_ENGINEERINGBAY, self)
+        for unit in self.my_units:
+            if unit.unit_type == engineering_bay_type and unit.is_completed and unit.is_idle:
+                if self.can_afford_upgrade("2") and not self.engineering_bay_research["structureArmour"]:
+                    self.research_upgrade(engineering_bay_type, structure_armour_upgrade)
+                    print("Structure Armour")
+                    self.engineering_bay_research["structureArmour"] = True
+                    break
+
     def research_damage_upgrade(self):
-        # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         damage_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL1)
         damage_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL2)
         damage_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANINFANTRYWEAPONSLEVEL3)
@@ -896,7 +923,6 @@ class MyAgent(IDABot):
                     break
 
     def research_armour_upgrade(self):
-        # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         armour_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL1)
         armour_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL2)
         armour_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANINFANTRYARMORSLEVEL3)
@@ -922,7 +948,6 @@ class MyAgent(IDABot):
                     break
 
     def research_vehicle_armour_upgrade(self):
-        # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         vehicle_armour_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL1)
         vehicle_armour_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL2)
         vehicle_armour_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANVEHICLEANDSHIPARMORSLEVEL3)
@@ -943,7 +968,6 @@ class MyAgent(IDABot):
                     break
 
     def research_ship_damage_upgrade(self):
-        # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         air_damage_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANSHIPWEAPONSLEVEL1)
         air_damage_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANSHIPWEAPONSLEVEL2)
         air_damage_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANSHIPWEAPONSLEVEL3)
@@ -964,7 +988,6 @@ class MyAgent(IDABot):
                     break
 
     def research_vehicle_damage_upgrade(self):
-        # Behöver kolla om botten har råd att researcha, can_afford fungerar ej för UpgradeID
         vehicle_damage_upgrade_type1 = UpgradeID(UPGRADE_ID.TERRANVEHICLEWEAPONSLEVEL1)
         vehicle_damage_upgrade_type2 = UpgradeID(UPGRADE_ID.TERRANVEHICLEWEAPONSLEVEL2)
         vehicle_damage_upgrade_type3 = UpgradeID(UPGRADE_ID.TERRANVEHICLEWEAPONSLEVEL3)
@@ -1157,7 +1180,6 @@ class MyAgent(IDABot):
         else:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_HELLION, self), 0)
 
-
     def request_ravens(self):
         if self.keep_attacking:
             self.request_unit_amount(UnitType(UNIT_TYPEID.TERRAN_RAVEN, self), 1)
@@ -1274,7 +1296,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
@@ -1282,7 +1304,7 @@ def main():
     # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Hard)
 
-    #coordinator.set_real_time(True)
+    # coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
     coordinator.launch_starcraft()
 
