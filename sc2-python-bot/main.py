@@ -1330,10 +1330,10 @@ class MyAgent(IDABot):
 def main():
     coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
-    #bot2 = MyAgent()
+    # bot2 = MyAgent()
 
     participant_1 = create_participants(Race.Terran, bot1)
-    #participant_2 = create_participants(Race.Terran, bot2)
+    # participant_2 = create_participants(Race.Terran, bot2)
     participant_2 = create_computer(Race.Random, Difficulty.Hard)
 
     # coordinator.set_real_time(True)
