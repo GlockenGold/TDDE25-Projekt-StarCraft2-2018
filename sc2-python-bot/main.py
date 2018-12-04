@@ -254,7 +254,7 @@ class MyAgent(IDABot):
                     self.map_tools.draw_text(unit.position, debug_string, Color.WHITE)
         for combat_unit in self.combat_dict:
             job = self.combat_dict[combat_unit]
-            debug_string = "<{} {} {}>".format(job[0].name, job[1], combat_unit.unit_type)
+            debug_string = "<{} {} {}>".format(job[0].name, job[1], combat_unit.position)
             self.map_tools.draw_text(combat_unit.position, debug_string, Color.RED)
 
     def set_my_bunkers(self):
@@ -418,7 +418,9 @@ class MyAgent(IDABot):
 
         damaged_defenders = [unit for unit in self.my_units if not unit.unit_type.is_building and
                              unit.hit_points < 45 and not self.worker_dict.get(unit, (0, 1, 2))[0] == WorkerJob.scouting and
-                             unit.unit_type in self.biological_units and not self.combat_dict.get(unit,(0,1))[0] == CombatJob.attacking]
+                             unit.unit_type in self.biological_units and not
+        self.combat_dict.get(unit,(0,1))[0] == CombatJob.attacking and not
+        self.worker_dict.get(unit,(0,1))[0] == WorkerJob.repairing]
         for unit in self.combat_dict:
             job = self.combat_dict[unit]
             if unit.is_idle:
@@ -431,7 +433,7 @@ class MyAgent(IDABot):
                                 unit.attack_move(assigned_choke)
                             else:
                                 unit.morph(UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED, self))
-                    elif len(damaged_defenders) > 0:
+                    elif len(damaged_defenders) > 0 and unit.hit_points >= 45:
                         unit.attack_move(random.choice(damaged_defenders).position)
                     else:
                         assigned_choke = self.closest_chokes[job[1]]
@@ -464,7 +466,7 @@ class MyAgent(IDABot):
                 elif job[0] == CombatJob.standby and squared_distance(unit.position, self.standby_rally_point) > 7:
                     unit.attack_move(self.standby_rally_point)
                 elif job[0] == CombatJob.attacking:
-                    if squared_distance(unit.position, self.attack_points[0]) < 20:
+                    if squared_distance(unit.position, self.attack_points[0]) < 5:
                         self.attack_points.pop(0)
                     if len(self.attack_points) < 1:
                         self.init_attack_points()
@@ -509,7 +511,7 @@ class MyAgent(IDABot):
                                            Point2DI(114, 21), Point2DI(116, 19), Point2DI(104, 31), Point2DI(106, 33),
                                            Point2DI(108, 31), Point2DI(110, 29), Point2DI(112, 27), Point2DI(114, 25)]
             self.barracks_positions = [Point2DI(112, 37), Point2DI(109, 34), Point2DI(116, 34), Point2DI(112, 31)]
-            self.siege_chokes = [Point2D(113, 47), Point2D(113, 55), Point2D(91, 46), Point2D(67, 60)]
+            self.siege_chokes = [Point2D(113, 47), Point2D(113, 55), Point2D(91, 46), Point2D(90, 77)]
             self.standby_rally_point = Point2D(115, 43)
             self.fusion_core_position = Point2DI(128, 20)
             self.engineering_bay_positions = [Point2DI(136, 29), Point2DI(135, 26)]
@@ -519,7 +521,7 @@ class MyAgent(IDABot):
             self.missile_turret_positions = [Point2DI(135, 24), Point2DI(132, 21), Point2DI(110, 18), Point2DI(104, 25),
                                              Point2DI(108, 43), Point2DI(110, 45), Point2DI(136, 53), Point2DI(132, 48),
                                              Point2DI(105, 56), Point2DI(112, 61), Point2DI(96, 30)]
-            self.harass_positions = [Point2D(10, 10),  Point2D(10, 147), Point2D(18, 144)]
+            self.harass_positions = [Point2D(14, 65),  Point2D(12,151), Point2D(20,141)]
         else:
             self.closest_chokes = [choke_north, Point2D(45, 106), Point2D(65, 120), Point2D(66, 88), Point2D(91, 106)]
             self.supply_depot_positions = [Point2DI(43, 149), Point2DI(45, 147), Point2DI(47, 145), Point2DI(39, 149),
@@ -540,7 +542,7 @@ class MyAgent(IDABot):
                                              Point2DI(16, 114), Point2DI(19, 119), Point2DI(49, 108), Point2DI(45, 110),
                                              Point2DI(66, 133), Point2DI(61, 115), Point2DI(55, 139), Point2DI(40, 122),
                                              Point2DI(44, 125)]
-            self.harass_positions = [Point2D(10, 10), Point2D(135, 10), Point2D(132, 24)]
+            self.harass_positions = [Point2D(80, 14), Point2D(140, 16), Point2D(130,26)]
             self.scouting_points.reverse()
 
     def reset_research(self):
@@ -1326,13 +1328,13 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
     bot1 = MyAgent()
-    # bot2 = MyAgent()
+    #bot2 = MyAgent()
 
     participant_1 = create_participants(Race.Terran, bot1)
-    # participant_2 = create_participants(Race.Terran, bot2)
-    participant_2 = create_computer(Race.Random, Difficulty.HardVeryHard)
+    #participant_2 = create_participants(Race.Terran, bot2)
+    participant_2 = create_computer(Race.Random, Difficulty.Hard)
 
     # coordinator.set_real_time(True)
     coordinator.set_participants([participant_1, participant_2])
