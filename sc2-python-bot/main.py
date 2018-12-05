@@ -64,7 +64,7 @@ class MyAgent(IDABot):
                            ]
         self.biological_units = [UnitType(UNIT_TYPEID.TERRAN_MARAUDER, self), UnitType(UNIT_TYPEID.TERRAN_MARINE, self),
                                  UnitType(UNIT_TYPEID.TERRAN_REAPER, self), UnitType(UNIT_TYPEID.TERRAN_SCV, self)]
-        #Medivacs borttagna eftersom scvs bara hoppar in i dem...
+        # Medivacs borttagna eftersom scvs bara hoppar in i dem...
         self.mechanical_units = [UnitType(UNIT_TYPEID.TERRAN_BATTLECRUISER, self),
                                  UnitType(UNIT_TYPEID.TERRAN_SIEGETANK, self), UnitType(UNIT_TYPEID.TERRAN_SIEGETANKSIEGED, self),
                                  UnitType(UNIT_TYPEID.TERRAN_RAVEN, self), UnitType(UNIT_TYPEID.TERRAN_VIKINGFIGHTER, self)]
@@ -151,8 +151,8 @@ class MyAgent(IDABot):
             self.request_marines()
             self.request_tanks()
             self.request_marauders()
-            self.request_medivacs()
             self.request_banshees()
+            self.request_medivacs()
             self.request_battlecruisers()
             self.request_vikings()
             self.request_ravens()
@@ -305,7 +305,7 @@ class MyAgent(IDABot):
                           " Choke Defenders:  {} \n" \
                           " Bunker Defenders: {} \n" \
                           " Standby Units:    {} \n" \
-                          " Attacking Units:    {} \n" \
+                          " Attacking Units:  {} \n" \
                           " Harassing Units:  {}".format(count_miners,
                                                                                       count_gas_collectors,
                                                                                       count_builders,
@@ -419,8 +419,8 @@ class MyAgent(IDABot):
         damaged_defenders = [unit for unit in self.my_units if not unit.unit_type.is_building and
                              unit.hit_points < 45 and not self.worker_dict.get(unit, (0, 1, 2))[0] == WorkerJob.scouting and
                              unit.unit_type in self.biological_units and not
-        self.combat_dict.get(unit,(0,1))[0] == CombatJob.attacking and not
-        self.worker_dict.get(unit,(0,1))[0] == WorkerJob.repairing]
+                             self.combat_dict.get(unit,(0,1))[0] == CombatJob.attacking and not
+                             self.worker_dict.get(unit,(0,1))[0] == WorkerJob.repairing]
         for unit in self.combat_dict:
             job = self.combat_dict[unit]
             if unit.is_idle:
@@ -442,7 +442,7 @@ class MyAgent(IDABot):
                                 unit.attack_move(assigned_choke)
                 elif job[0] == CombatJob.defending_bunker:
                     assigned_bunker = self.my_bunkers.get(job[1])
-                    if not assigned_bunker == None and assigned_bunker.is_completed:
+                    if assigned_bunker is not None and assigned_bunker.is_completed:
                         unit.right_click(assigned_bunker)
                 elif unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_MEDIVAC, self) or \
                         unit.unit_type == UnitType(UNIT_TYPEID.TERRAN_RAVEN, self):
@@ -475,18 +475,18 @@ class MyAgent(IDABot):
                 elif job[0] == CombatJob.harassing:
                     on_the_way = False
                     for position_index, move_position in enumerate(self.harass_positions):
-                        if squared_distance(unit.position, move_position) < 3:
+                        if squared_distance(unit.position, move_position) < 3 and \
+                                self.count_combat_job(CombatJob.harassing) >= 2:
                             on_the_way = True
                             if position_index == 0:
-                                unit.move(self.harass_positions[position_index + 1])
+                                unit.attack_move(self.harass_positions[position_index + 1])
                             elif position_index == 1:
                                 unit.attack_move(self.harass_positions[position_index + 1])
                             else:
                                 self.combat_dict[unit] = (CombatJob.standby, 0)
                             break
-                    if not on_the_way:
-                        unit.move(self.harass_positions[0])
-
+                    if not on_the_way and self.count_combat_job(CombatJob.harassing) >= 2:
+                        unit.attack_move(self.harass_positions[0])
 
     def init_attack_points(self):
         def squared_distance(p1: Point2D, p2: Point2D) -> float:
@@ -609,7 +609,7 @@ class MyAgent(IDABot):
                         self.worker_dict[worker] = (WorkerJob.collecting_gas, base_number * 2 + 1)
                         needed_gas_collectors[base_number * 2 + 1] -= 1
                         break
-                    elif len(damaged_buildings)> 0 and self.count_worker_job(WorkerJob.repairing) == 0:
+                    elif len(damaged_buildings) > 0 and self.count_worker_job(WorkerJob.repairing) == 0:
                         self.worker_dict[worker] = (WorkerJob.repairing, damaged_buildings[0])
                         break
 
@@ -629,7 +629,7 @@ class MyAgent(IDABot):
         for worker in gatherers_and_idle_workers:
             worker.stop()
 
-    def count_worker_job(self,job):
+    def count_worker_job(self, job):
         if isinstance(job, tuple):
             return len([worker for worker in self.worker_dict if self.worker_dict[worker] == job])
         else:
@@ -642,8 +642,9 @@ class MyAgent(IDABot):
             job = worker_dict[worker][0]
             job_index = worker_dict[worker][1]
             if job == WorkerJob.repairing and job_index.is_alive and ((job_index.unit_type.is_building and
-                                            job_index.hit_points < 250) or (job_index.unit_type
-                                            in self.mechanical_units and job_index.hit_points < 100)):
+                                                                       job_index.hit_points < 250) or
+                                                                      (job_index.unit_type in self.mechanical_units
+                                                                       and job_index.hit_points < 100)):
                 worker.repair(job_index)
             elif worker.is_idle:
                 if job == WorkerJob.mining:
@@ -738,7 +739,7 @@ class MyAgent(IDABot):
         amount_constructing = self.count_worker_job((WorkerJob.constructing, starport_type))
         if len(self.starport_positions) == 0 and self.count_starports < 3:
             self.set_choke_points()
-        if self.count_factories > 1 and self.can_afford(starport_type) and amount_constructing == 0 \
+        if self.count_factories >= 1 and self.can_afford(starport_type) and amount_constructing == 0 \
                 and self.count_starports < 3 and self.count_completed_bases > 1:
             for build_position in self.starport_positions:
                 if self.map_tools.can_build_type_at_position(build_position.x, build_position.y, starport_type):
@@ -1328,7 +1329,7 @@ class MyAgent(IDABot):
 
 
 def main():
-    coordinator = Coordinator(r"D:\starcraft\StarCraft II\StarCraft II\Versions\Base63454\SC2_x64.exe")
+    coordinator = Coordinator(r"F:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
