@@ -123,20 +123,12 @@ class MyAgent(IDABot):
         self.print_debug()
         if self.game_ticker % 2 == 0:
             self.train_requests()
-            self.research_vehicle_damage_upgrade()
-            self.research_combat_shields()
-            self.research_concussive_shells()
         if (self.game_ticker + 1) % 2 == 0:
-            self.research_damage_upgrade()
-            self.research_ship_damage_upgrade()
-            self.research_auto_tracking()
             self.execute_worker_jobs()
             self.research_structure_armour()
         if self.game_ticker % 5 == 0:
             self.build_refineries()
             self.build_depots()
-            self.research_armour_upgrade()
-            self.research_vehicle_armour_upgrade()
             self.build_barracks()
             self.build_bunkers()
             self.build_factory()
@@ -159,6 +151,14 @@ class MyAgent(IDABot):
             self.build_expansion()
             self.build_armoury()
         if self.game_ticker % 50 == 0:
+            self.research_armour_upgrade()
+            self.research_vehicle_armour_upgrade()
+            self.research_vehicle_damage_upgrade()
+            self.research_combat_shields()
+            self.research_concussive_shells()
+            self.research_damage_upgrade()
+            self.research_ship_damage_upgrade()
+            self.research_auto_tracking()
             self.finish_buildings()
             self.correct_workers()
         if self.game_ticker % 1000 == 0:
@@ -511,7 +511,7 @@ class MyAgent(IDABot):
                                            Point2DI(114, 21), Point2DI(116, 19), Point2DI(104, 31), Point2DI(106, 33),
                                            Point2DI(108, 31), Point2DI(110, 29), Point2DI(112, 27), Point2DI(114, 25)]
             self.barracks_positions = [Point2DI(112, 37), Point2DI(109, 34), Point2DI(116, 34), Point2DI(112, 31)]
-            self.siege_chokes = [Point2D(113, 47), Point2D(113, 55), Point2D(91, 46), Point2D(90, 77)]
+            self.siege_chokes = [Point2D(113, 47), Point2D(113, 55), Point2D(91, 46), Point2D(90, 77), Point2D(68, 59)]
             self.standby_rally_point = Point2D(115, 43)
             self.fusion_core_position = Point2DI(128, 20)
             self.engineering_bay_positions = [Point2DI(136, 29), Point2DI(135, 26)]
@@ -572,7 +572,7 @@ class MyAgent(IDABot):
             worker_not_needed = (job[0] == WorkerJob.mining and
                                  self.count_worker_job(job) > 2 * len(self.my_minerals[job[1]]) or
                                  (job[0] == WorkerJob.collecting_gas and self.count_worker_job(job) > 3))
-            if job[0] == WorkerJob.constructing and not worker.is_constructing(job[1]):
+            if job[0] == WorkerJob.constructing and worker.is_idle:
                 worker_not_needed = True
             if not worker.is_alive or worker_not_needed:
                 self.worker_dict.pop(worker)
@@ -641,6 +641,8 @@ class MyAgent(IDABot):
         for worker in list(worker_dict.keys()):
             job = worker_dict[worker][0]
             job_index = worker_dict[worker][1]
+            if job == (WorkerJob.constructing, UnitType(UNIT_TYPEID.TERRAN_REFINERY, self)):
+                worker.stop
             if job == WorkerJob.repairing and job_index.is_alive and ((job_index.unit_type.is_building and
                                                                        job_index.hit_points < 250) or
                                                                       (job_index.unit_type in self.mechanical_units
@@ -764,7 +766,7 @@ class MyAgent(IDABot):
         fusion_core_type = UnitType(UNIT_TYPEID.TERRAN_FUSIONCORE, self)
         amount_constructing = self.count_worker_job((WorkerJob.constructing, fusion_core_type))
         if amount_constructing == 0 and self.can_afford(fusion_core_type) and self.count_starports >= 1 \
-                and self.count_completed_bases >= 2 and self.count_fusion_cores < 1:
+                and self.count_completed_bases >= 3 and self.count_fusion_cores < 1:
             worker = random.choice(self.my_workers)
             print('building fusion core at',self.fusion_core_position)
             worker.build(fusion_core_type, self.fusion_core_position)
@@ -1058,10 +1060,10 @@ class MyAgent(IDABot):
             if len(self.my_minerals[index]) >= 4:
                 bases_with_minerals.append(base)
         expansion_condition = (amount_constructing == 0 and
-                               self.sought_unit_counts[worker_type] <= self.count_workers + 5 and
+                               self.sought_unit_counts[worker_type] <= self.count_workers + 3 and
                                self.count_completed_barracks >= 1 and
                                self.can_afford(command_centre_type) and
-                               len(bases_with_minerals) < 3 and
+                               len(bases_with_minerals) <= 3 and
                                self.count_refineries >= 2 * self.count_all_bases)
         if expansion_condition:
             build_location = self.base_location_manager.get_next_expansion(PLAYER_SELF)
@@ -1328,8 +1330,19 @@ class MyAgent(IDABot):
         return geysers
 
 
+class MyAgent_test(IDABot):
+    def __init__(self):
+        IDABot.__init__(self)
+
+    def on_game_start(self):
+        IDABot.on_game_start(self)
+
+    def on_step(self):
+        IDABot.on_step(self)
+
+
 def main():
-    coordinator = Coordinator(r"F:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
+    coordinator = Coordinator(r"E:\starcraft\StarCraft II\Versions\Base67188\SC2_x64.exe")
     bot1 = MyAgent()
     # bot2 = MyAgent()
 
